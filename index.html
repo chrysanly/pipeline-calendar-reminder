@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ff6fa5">
+  <title>Pipeline — Client Reminders &amp; BD Calendar</title>
+  <meta name="description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
+  <meta name="robots" content="index,follow">
+  <meta name="author" content="Pipeline">
+  <link rel="canonical" href="https://pipeline-9944d.web.app/">
+
+  <!-- Icons live in assets/ in the source and in dist/; favicon.ico, robots.txt
+       and sitemap.xml are also copied to the root of dist/. ?v= busts old caches. -->
+  <link rel="icon" href="assets/favicon.ico?v=2" sizes="any">
+  <link rel="icon" href="assets/logo.svg?v=2" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-32.png?v=2" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+  <link rel="manifest" href="assets/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-title" content="Pipeline">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Social previews -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Pipeline">
+  <meta property="og:title" content="Pipeline — Client Reminders &amp; BD Calendar">
+  <meta property="og:description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
+  <meta property="og:url" content="https://pipeline-9944d.web.app/">
+  <meta property="og:image" content="https://pipeline-9944d.web.app/assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Pipeline logo with the tagline Client reminders and BD calendar">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pipeline — Client Reminders &amp; BD Calendar">
+  <meta name="twitter:description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
+  <meta name="twitter:image" content="https://pipeline-9944d.web.app/assets/og-image.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Pipeline",
+    "url": "https://pipeline-9944d.web.app/",
+    "description": "Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "image": "https://pipeline-9944d.web.app/assets/og-image.png",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="banner" class="banner" role="status" aria-live="polite" hidden>
+    <i class="fa-solid fa-bell banner-icon" aria-hidden="true"></i>
+    <div class="banner-text">
+      <button id="banner-title" type="button" class="banner-title"></button>
+      <span id="banner-body" class="banner-body"></span>
+    </div>
+    <button id="banner-close" type="button" class="banner-close" aria-label="Dismiss"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+  </div>
+
+  <header class="topbar">
+    <h1 class="brand"><svg class="brand-logo" viewBox="0 0 64 64" width="28" height="28" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="16" fill="#ff6fa5"/><path fill="#ffffff" fill-rule="evenodd" d="M19 15H33A11.5 11.5 0 0 1 33 38H27V49H19Z M27 22.5V30.5H32.5A4 4 0 0 0 32.5 22.5Z"/><circle cx="50" cy="14" r="6.5" fill="#e60039" stroke="#ffd400" stroke-width="3"/></svg>Pipeline</h1>
+    <div class="nav">
+      <button id="prev" type="button" class="icon" aria-label="Previous"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+      <h2 id="month-label" class="month-label">—</h2>
+      <button id="next" type="button" class="icon" aria-label="Next"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+      <button id="today" type="button" class="ghost">Today</button>
+    </div>
+    <div class="views" role="group" aria-label="View">
+      <button id="view-dashboard" type="button" data-view="dashboard" title="Home (H)"><i class="fa-solid fa-house" aria-hidden="true"></i> <span class="btn-label">Home</span></button>
+      <button id="view-day" type="button" data-view="day" title="Day (D)"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> <span class="btn-label">Day</span></button>
+      <button id="view-week" type="button" data-view="week" title="Week (W)"><i class="fa-solid fa-calendar-week" aria-hidden="true"></i> <span class="btn-label">Week</span></button>
+      <button id="view-month" type="button" data-view="month" title="Month (M)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Month</span></button>
+    </div>
+    <button id="theme-toggle" type="button" class="icon" aria-label="Toggle theme"><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
+    <button id="import-btn" type="button" class="ghost" aria-label="Import Excel" title="Import reminders from an Excel file"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> <span class="btn-label">Import Excel</span></button>
+    <input type="file" id="import-file" accept=".xlsx,.xls,.csv" hidden>
+    <button id="add-event" type="button" class="primary" aria-label="New reminder"><i class="fa-solid fa-plus" aria-hidden="true"></i> <span class="btn-label">New reminder</span></button>
+    <div id="auth-area" class="auth-area" hidden>
+      <button id="sign-in" type="button" class="ghost" aria-label="Sign in with Google" hidden><i class="fa-brands fa-google" aria-hidden="true"></i> <span class="btn-label">Sign in with Google</span></button>
+      <span id="user-name" class="user-name" hidden></span>
+      <button id="sign-out" type="button" class="icon" aria-label="Sign out" title="Sign out" hidden><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></button>
+    </div>
+  </header>
+
+  <section id="signed-out" class="signed-out" hidden>
+    <h2>Sign in to see your reminders</h2>
+    <p>Your reminders are saved to your Google account and stay in sync on your PC, phone and every open tab.</p>
+    <button id="prompt-sign-in" type="button" class="primary"><i class="fa-brands fa-google" aria-hidden="true"></i> Sign in with Google</button>
+  </section>
+
+  <main class="layout">
+    <!-- Home: every client, their status and where they are. Filled by ui.js. -->
+    <section id="dashboard" class="dashboard" aria-label="Clients dashboard" hidden>
+      <div id="status-cards" class="status-cards"></div>
+      <div class="dash-body">
+        <section class="dash-card dash-locations" aria-labelledby="locations-title">
+          <h2 id="locations-title" class="dash-title"><i class="fa-solid fa-earth-asia" aria-hidden="true"></i> Locations</h2>
+          <div id="location-list" class="location-list"></div>
+        </section>
+        <section class="dash-card dash-clients" aria-labelledby="clients-title">
+          <div class="dash-clients-head">
+            <h2 id="clients-title" class="dash-title"><i class="fa-solid fa-users" aria-hidden="true"></i> Clients <span id="client-count" class="client-count"></span></h2>
+            <input type="search" id="client-search" class="client-search" placeholder="Search name, phone, city…" aria-label="Search clients" autocomplete="off">
+          </div>
+          <div id="active-filters" class="active-filters"></div>
+          <div id="client-list" class="client-list"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="calendar" aria-label="Calendar">
+      <div id="weekdays" class="weekdays"></div>
+      <div id="grid" class="grid"></div>
+      <!-- Phones only: the selected day's reminders under the compact month grid. -->
+      <div id="day-agenda" class="day-agenda" hidden>
+        <h3 id="agenda-label" class="agenda-label"></h3>
+        <div id="agenda-list" class="agenda-list"></div>
+      </div>
+    </section>
+
+    <div id="panel-backdrop" class="panel-backdrop" hidden></div>
+    <aside id="panel" class="panel" aria-label="Reminder details" hidden>
+      <div class="panel-head">
+        <h2 id="day-label" class="day-label">—</h2>
+        <button id="panel-close" type="button" class="icon" aria-label="Close details"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+      <div id="day-events" class="day-events"></div>
+    </aside>
+  </main>
+
+  <footer class="site-footer">
+    &copy; <span id="copyright-year">2026</span> Pipeline &middot; Built by <a href="https://portfolio-v2-mu-roan.vercel.app/" target="_blank" rel="noopener">chrys</a>
+  </footer>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h2 id="modal-title">New reminder</h2>
+        <button id="modal-close" type="button" class="icon" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+      <form id="event-form" novalidate>
+        <input type="hidden" name="id">
+
+        <label>Title
+          <input type="text" name="title" placeholder="Follow-up call" required>
+        </label>
+
+        <label>Client
+          <input type="text" name="clientName" placeholder="Acme Ltd.">
+        </label>
+
+        <div class="row">
+          <label>Status
+            <select name="status">
+              <option value="lead" selected>Lead</option>
+              <option value="potential">Potential</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+          <label>Phone
+            <input type="tel" name="phone" placeholder="+971 4 123 4567" autocomplete="off">
+          </label>
+        </div>
+
+        <label>Location
+          <input type="text" name="location" placeholder="Area or address, e.g. JLT Cluster X">
+        </label>
+
+        <div class="row">
+          <label>City
+            <input type="text" name="city" placeholder="Dubai">
+          </label>
+          <label>Country
+            <input type="text" name="country" list="country-list" placeholder="United Arab Emirates">
+          </label>
+        </div>
+        <datalist id="country-list"></datalist>
+        <p class="form-hint">Status and location apply to all of this client's reminders.</p>
+
+        <div class="row">
+          <label>Date
+            <input type="date" name="date" required>
+          </label>
+          <label>Time
+            <input type="time" name="time">
+          </label>
+        </div>
+
+        <label>Remind me
+          <select name="reminderMinutesBefore">
+            <option value="0">At start time</option>
+            <option value="5">5 minutes before</option>
+            <option value="15" selected>15 minutes before</option>
+            <option value="30">30 minutes before</option>
+            <option value="60">1 hour before</option>
+            <option value="1440">1 day before</option>
+          </select>
+        </label>
+
+        <label>Notes
+          <textarea name="notes" rows="4" placeholder="Discuss renewal terms…"></textarea>
+        </label>
+
+        <p id="form-error" class="form-error" role="alert"></p>
+
+        <div class="modal-actions">
+          <button id="modal-cancel" type="button" class="ghost">Cancel</button>
+          <button type="submit" class="primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- defer: download in parallel without blocking the page; they still run in
+       order, before the app module. The Excel reader loads on first import. -->
+  <script defer src="https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/12.19.0/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore-compat.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

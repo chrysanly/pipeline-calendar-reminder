@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pipeline-9944d.web.app/sitemap.xml

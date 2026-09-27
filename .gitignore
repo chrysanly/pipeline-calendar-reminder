@@ -1,0 +1,29 @@
+# Dependencies and generated output (npm install / npm run build recreate them)
+node_modules/
+dist/
+
+# Test runs
+test-results/
+playwright-report/
+blob-report/
+
+# Firebase CLI state and logs
+.firebase/
+firebase-debug*.log
+*.log
+
+# Local config: .env lives on your PC only; js/firebase-config.js is generated
+# from it (npm run config). Commit .env.example, never .env.
+.env
+.env.*
+!.env.example
+js/firebase-config.js
+
+# Editor/OS junk
+~$*
+.DS_Store
+Thumbs.db
+
+# Real client data: never commit. Tests that need it skip when it's absent;
+# everything else uses the made-up tests/fixtures/sample.xlsx.
+tests/fixtures/test-data-pipeline.xlsx

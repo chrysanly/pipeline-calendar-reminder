@@ -1,0 +1,25 @@
+{
+  "name": "client-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vanilla HTML/CSS/JS calendar with client reminders and notes.",
+  "type": "module",
+  "scripts": {
+    "config": "node scripts/gen-config.mjs",
+    "pretest": "npm run config",
+    "test": "node tests/run-node.mjs",
+    "test:web": "playwright test",
+    "prebuild": "npm run config",
+    "build": "node build.mjs",
+    "prestart": "npm run config",
+    "start": "node tests/web/server.mjs 8000",
+    "check:firebase": "node scripts/check-firebase.mjs",
+    "deploy": "npm run check:firebase && firebase deploy --only hosting,firestore:rules",
+    "icons": "node scripts/make-icons.mjs",
+    "screenshots": "node scripts/screenshots.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

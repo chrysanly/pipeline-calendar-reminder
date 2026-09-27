@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pipeline — tests</title>
+  <style>
+    body { font: 14px/1.6 system-ui, sans-serif; margin: 24px; max-width: 760px; }
+    h1 { font-size: 18px; }
+    #summary { font-weight: 700; padding: 8px 12px; border-radius: 8px; display: inline-block; }
+    #summary.pass, li.pass { color: #1b7a43; }
+    #summary.fail, li.fail { color: #c0334a; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 3px 0; border-bottom: 1px solid #eee; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Pipeline — test suite</h1>
+  <p id="summary">running…</p>
+  <ul id="results"></ul>
+
+  <script type="module">
+    import './calendar.test.js';
+    import './storage.test.js';
+    import './reminders.test.js';
+    import './theme.test.js';
+    import './phone-location.test.js';
+    import './dashboard.test.js';
+    import './ui-pure.test.js';
+    import './importer.test.js';
+    import { cloudTestsDone } from './cloud.test.js';
+    import { report } from './runner.js';
+    await cloudTestsDone;
+    report();
+  </script>
+</body>
+</html>
