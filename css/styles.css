@@ -333,3 +333,54 @@ body[data-auth="signed-out"] .layout { display: none; }
   .modal-card, .modal-backdrop, .panel { animation: none; }
   .day, .views button { transition: none; }
 }
+
+/* ---------- feature pages (js/views/registry.js, mounted by ui.js) ---------- */
+
+.feature-page { display: grid; gap: var(--sp-4); align-content: start; min-width: 0; }
+.feature-page[hidden] { display: none; }
+
+/* More than four pages: the nav scrolls sideways instead of squeezing them. */
+.views:has(> :nth-child(5)) { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+@media (max-width: 640px) {
+  .topbar .views:has(> :nth-child(5)) {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(68px, 1fr);
+    /* Fade the right edge so the hidden pages read as "swipe for more"; the
+       padding lets the last page scroll clear of the fade. */
+    padding-right: 28px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
+}
+
+/* ---------- Settings → Business (js/views/settings.js) ---------- */
+
+.field-error { margin: 0; font-size: var(--fs-sm); color: var(--danger); }
+.field-error:empty { display: none; }
+.settings-section input[aria-invalid="true"],
+.settings-section select[aria-invalid="true"] { border-color: var(--danger); }
+
+/* ---------- first load (index.html #app-loading, removed by app.js) ---------- */
+
+.app-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  min-height: 40vh;
+  margin: 0;
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+}
+.app-loading-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: btn-spin .8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-loading-spinner { animation-duration: 2.4s; }
+}

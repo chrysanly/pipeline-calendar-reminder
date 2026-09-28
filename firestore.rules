@@ -1,11 +1,46 @@
 rules_version = '2';
 
-// Each signed-in user can read and write only their own reminders, stored at
-// users/{uid}/events/{eventId}. Everything else is denied (no other match).
+// Each signed-in user can read and write only their own data, stored at
+// users/{uid}/<collection>/{id} (events, meetings, history, clients, tasks,
+// invoices, settings, …).
+//
+// Client portal: portals/{token} is a page an owner shares with a client.
+// Anyone holding the unguessable link may read that one page (never list
+// them); only the owner may create, change or delete it. The client may leave
+// replies (approve a proposal, a comment) that only the owner can read.
+// Everything else is denied (no other match).
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
     match /users/{uid}/{doc=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    match /portals/{token} {
+      function isOwner() {
+        return signedIn() && resource.data.ownerUid == request.auth.uid;
+      }
+
+      allow get: if token.matches('^[0-9a-f]{32}$');
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isOwner() && request.resource.data.ownerUid == request.auth.uid;
+      allow delete: if isOwner();
+
+      match /replies/{replyId} {
+        function portalOwner() {
+          return get(/databases/$(database)/documents/portals/$(token)).data.ownerUid;
+        }
+
+        allow create: if exists(/databases/$(database)/documents/portals/$(token))
+          && request.resource.data.keys().hasOnly(['type', 'itemId', 'name', 'message', 'createdAt'])
+          && request.resource.data.type in ['approve', 'decline', 'comment']
+          && request.resource.data.get('message', '').size() <= 2000
+          && request.resource.data.get('name', '').size() <= 120;
+        allow read, delete: if signedIn() && portalOwner() == request.auth.uid;
+      }
     }
   }
 }

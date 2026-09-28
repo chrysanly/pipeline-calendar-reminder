@@ -3,45 +3,68 @@
 // Zero dependencies: `node build.mjs`.
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, copyFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateConfig } from './scripts/gen-config.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 
-// Dependency order: every module only uses names defined above it.
-const MODULES = [
-  'calendar.js', 'storage.js', 'reminders.js', 'phone-location.js', 'importer.js', 'dashboard.js',
-  'firebase-config.js', 'cloud.js', 'records.js', 'history.js', 'transcript.js', 'groq.js', 'minutes.js',
-  'record-store.js', 'theme.js', 'xlsx-loader.js', 'ui.js', 'topbar-ui.js', 'dashboard-ui.js', 'settings-ui.js', 'history-ui.js', 'minutes-ui.js', 'app.js'
-];
+// The bundle starts here and takes every module it imports, dependencies first.
+const ENTRY = 'app.js';
 
 // Inlined in this order, each where index.html links it.
 const STYLESHEETS = ['tokens.css', 'components.css', 'styles.css', 'nav.css', 'dashboard.css', 'responsive.css', 'features.css'];
+// Every other css/*.css is a feature stylesheet (a view loads it when it
+// registers, see ui.js loadStylesheet), inlined before </head>; these belong
+// to other pages.
+const OTHER_PAGE_STYLESHEETS = ['portal.css'];
 
-const IMPORT_RE = /^import\s+[\s\S]*?from\s+'\.\/[\w.-]+';?[ \t]*\r?\n/gm;
+const IMPORT_RE = /^import\s+[\s\S]*?from\s+'\.{1,2}\/[\w./-]+';?[ \t]*\r?\n/gm;
+const IMPORT_PATH_RE = /^import\s+[\s\S]*?from\s+'(\.{1,2}\/[\w./-]+)';?/gm;
 const EXPORT_RE = /^export\s+(?=(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var)\b)/gm;
 
-/** Names a module declares with `export` — used to catch collisions. */
-function exportedNames(source) {
+/** Top-level names a module declares (exported or not): the flat bundle shares one scope. */
+function topLevelNames(source) {
   const names = [];
-  const re = /^export\s+(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
+  const re = /^(?:export\s+)?(?:async\s+)?(?:function\*?|class|const|let|var)\s+([A-Za-z_$][\w$]*)/gm;
   let match;
   while ((match = re.exec(source))) names.push(match[1]);
   return names;
+}
+
+/** js/-relative paths the module imports, e.g. 'views/settings.js' → ['ui.js']. */
+function importsOf(file, source) {
+  const base = dirname(join('js', file));
+  return [...source.matchAll(IMPORT_PATH_RE)].map(m => relative('js', join(base, m[1])).split(sep).join('/'));
+}
+
+/** Every module reachable from ENTRY, each after the modules it imports. */
+function moduleOrder() {
+  const order = [];
+  const state = new Map(); // file -> 'visiting' | 'done'
+  const visit = (file, from) => {
+    if (state.get(file)) return; // done, or a cycle (fine unless used at load time)
+    const path = join(root, 'js', file);
+    if (!existsSync(path)) throw new Error(`js/${from} imports js/${file}, which does not exist.`);
+    state.set(file, 'visiting');
+    const source = readFileSync(path, 'utf8');
+    for (const dep of importsOf(file, source)) visit(dep, file);
+    state.set(file, 'done');
+    order.push({ file, source });
+  };
+  visit(ENTRY, ENTRY);
+  return order;
 }
 
 function bundleJs() {
   const seen = new Map();
   const chunks = [];
 
-  for (const file of MODULES) {
-    const source = readFileSync(join(root, 'js', file), 'utf8');
-
-    for (const name of exportedNames(source)) {
+  for (const { file, source } of moduleOrder()) {
+    for (const name of topLevelNames(source)) {
       if (seen.has(name)) {
         throw new Error(
-          `Export name collision: "${name}" is exported by both ${seen.get(name)} and ${file}. ` +
+          `Name collision: "${name}" is declared at the top of both js/${seen.get(name)} and js/${file}. ` +
           'The flat bundle cannot keep both — rename one.'
         );
       }
@@ -83,6 +106,8 @@ function build() {
     const css = readFileSync(join(root, 'css', file), 'utf8').trim();
     out = out.replace(linkRe(file), () => `  <style>\n${css}\n  </style>`);
   }
+  const features = featureStyles();
+  if (features) out = out.replace(/<\/head>/, () => `${features}\n</head>`);
   out = out.replace(SCRIPT_RE, () => `  <script>\n${js}\n  </script>`);
 
   const dist = join(root, 'dist');
@@ -91,6 +116,19 @@ function build() {
   copyAssets(dist);
   checkLocalReferences(out, dist);
   return out;
+}
+
+/**
+ * Feature stylesheets as <style data-css="css/<file>"> blocks, sorted; ui.js
+ * sees the marker and does not fetch the file (dist/ has no css/ folder).
+ */
+function featureStyles() {
+  const skip = new Set([...STYLESHEETS, ...OTHER_PAGE_STYLESHEETS]);
+  return readdirSync(join(root, 'css'))
+    .filter(file => file.endsWith('.css') && !skip.has(file))
+    .sort()
+    .map(file => `  <style data-css="css/${file}">\n${readFileSync(join(root, 'css', file), 'utf8').trim()}\n  </style>`)
+    .join('\n');
 }
 
 // Crawlers and browsers look for these at the site root, whatever the page links.

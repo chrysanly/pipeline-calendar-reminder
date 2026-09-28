@@ -10,14 +10,19 @@ import {
 import { createRecordStore } from './record-store.js';
 import { startReminderLoop, requestPermission } from './reminders.js';
 import { FIREBASE_CONFIG } from './firebase-config.js';
+import { APP_CONFIG } from './app-config.js';
 import {
   MIGRATED_KEY, isConfigured, selectBackend, planMigration, cloudBackend, connectFirebase
 } from './cloud.js';
+import { createStore, listBackend, readSettings } from './store.js';
+import { createHooks } from './hooks.js';
+import { createViewRegistry } from './views/registry.js';
+import { FEATURES } from './features.js';
 import { initTheme, toggleTheme } from './theme.js';
 import {
   renderCalendar, renderPanel, isPanelOpen, swipeDirection, COMPACT_QUERY,
   openModal, closeModal, isModalOpen, readForm, showBanner, bindBanner,
-  bindForm, withBusy
+  bindForm, withBusy, showView, mountView
 } from './ui.js';
 import { renderAuth, bindAccountMenu, isAccountMenuOpen, closeAccountMenu, trackSave } from './topbar-ui.js';
 import { loadXlsx } from './xlsx-loader.js';
@@ -28,11 +33,16 @@ import { bindSettings, openSettings, closeSettings, isSettingsOpen } from './set
 
 const VIEW_KEY = 'view';
 
+// Pages that feature modules register (js/features.js).
+const views = createViewRegistry();
+
+const isKnownView = view => VIEWS.includes(view) || views.has(view);
+
+/** The saved page; checked again once the features have registered theirs. */
 function loadView() {
   try {
-    const saved = localStorage.getItem(VIEW_KEY);
     // First visit: the Home dashboard.
-    return VIEWS.includes(saved) ? saved : 'dashboard';
+    return localStorage.getItem(VIEW_KEY) || 'dashboard';
   } catch (err) {
     return 'dashboard';
   }
@@ -71,6 +81,22 @@ const state = {
 };
 
 let reminders = null;
+// The signed-in user in cloud mode (null signed out and in local mode).
+let currentUser = null;
+
+// Feature modules listen here: 'events-change' {prev, next},
+// 'status-change' {clientName, status, previous}, 'auth' {user},
+// 'store-change' {name} (null: every collection).
+const hooks = createHooks();
+
+// Feature collections (clients, tasks, invoices, settings, …).
+const store = createStore({
+  onChange(name) {
+    hooks.emit('store-change', { name });
+    render();
+  },
+  onError: err => showBanner('Could not save your change', err && err.message ? err.message : String(err))
+});
 
 const records = createRecordStore({
   onChange(name, list) {
@@ -134,6 +160,7 @@ const handlers = {
     commit(applyClientFields(state.events, clientName, { status }, new Date().toISOString()));
     const from = known ? `${STATUS_LABELS[known.status]} → ` : '';
     log('status', 'client', clientName, clientName, `${from}${STATUS_LABELS[status]}`);
+    hooks.emit('status-change', { clientName, status, previous: known ? known.status : null });
   },
   onSaveMinutes(meeting, isNew) {
     records.commit('meetings', isNew
@@ -172,6 +199,7 @@ function commit(events) {
   const prev = state.events;
   state.events = events;
   render();
+  hooks.emit('events-change', { prev, next: events });
   if (!backend) return;
   trackSave(backend.write(prev, events)).catch(err => {
     showBanner('Could not save your change', err && err.message ? err.message : String(err));
@@ -180,15 +208,25 @@ function commit(events) {
 
 /** A new list from storage or another device. */
 function receive(events) {
+  const prev = state.events;
   state.events = events;
   state.loading = false;
   if (state.openId && !findEvent(state.events, state.openId)) state.openId = null;
   render();
+  hooks.emit('events-change', { prev, next: events });
   if (reminders) reminders.check();
 }
 
+// Features render only once the app has registered them all.
+let started = false;
+
 function render() {
-  if (state.view === 'dashboard') renderDashboard(state, handlers);
+  if (!started) return;
+  const feature = views.get(state.view);
+  if (feature) {
+    showView(state.view);
+    feature.render(app, feature.section);
+  } else if (state.view === 'dashboard') renderDashboard(state, handlers);
   else if (state.view === 'history') renderHistory(state);
   else if (state.view === 'minutes') renderMinutes(state, handlers);
   else renderCalendar(state, handlers);
@@ -210,6 +248,7 @@ function closePanel() {
 }
 
 function setView(view) {
+  if (!isKnownView(view)) return;
   state.view = view;
   if (CALENDAR_VIEWS.includes(view)) state.calendarView = view;
   try {
@@ -367,6 +406,7 @@ function bind() {
     else if (key === 'm') setView('month');
     else if (key === 'n') setView('minutes');
     else if (key === 'l') setView('history');
+    else if (views.byKey(key)) setView(views.byKey(key).id);
   });
 
   // Local mode: another tab saved, so pick up its changes. (In cloud mode the
@@ -375,6 +415,7 @@ function bind() {
     window.addEventListener('storage', e => {
       if (e.key === STORAGE_KEY || e.key === null) receive(loadEvents());
       records.reloadKey(e.key);
+      store.reloadKey(e.key);
     });
   }
 
@@ -450,9 +491,13 @@ function startCloud() {
     if (unsubscribe) unsubscribe();
     unsubscribe = null;
 
+    currentUser = user || null;
+
     if (!user) {
       backend = null;
       records.disconnect();
+      store.detach();
+      hooks.emit('auth', { user: null });
       renderAuth('signed-out');
       receive([]);
       return;
@@ -461,6 +506,8 @@ function startCloud() {
     const target = cloudBackend(fb.db, user.uid);
     backend = target;
     records.connect({ db: fb.db, uid: user.uid });
+    store.attach(name => listBackend(name, { db: fb.db, uid: user.uid }));
+    hooks.emit('auth', { user });
     state.loading = true; // until this account's first snapshot
     renderAuth('signed-in', user);
     unsubscribe = target.subscribe(
@@ -471,15 +518,64 @@ function startCloud() {
   });
 }
 
+/** What a feature module gets: the shared state, data, hooks and page registry. */
+const app = {
+  mode,
+  config: APP_CONFIG,
+  hooks,
+  store,
+  get state() { return state; },
+  get user() { return currentUser; },
+  /** Saves reach a backend: local mode, or signed in. */
+  canSave: () => mode === 'local' || Boolean(currentUser),
+  /** Business settings (settings/app) over the .env Worker URL over the defaults. */
+  settings: () => readSettings(store.all('settings'), APP_CONFIG),
+  clients: () => buildClients(state.events),
+  views: {
+    /** Add a page with a nav button; see js/views/registry.js for the fields. */
+    register(view) {
+      views.register(view);
+      view.section = mountView(view, setView);
+      if (view.bind) view.bind(app, view.section);
+      return view;
+    }
+  },
+  render,
+  setView,
+  openReminder,
+  commitEvents: events => commit(events),
+  log,
+  notify: (title, body = '') => showBanner(title, body)
+};
+
+/** Each feature on its own: one that throws is reported and the rest still load. */
+function registerFeatures() {
+  for (const register of FEATURES) {
+    try {
+      register(app);
+    } catch (err) {
+      console.error('feature failed to load', err);
+      showBanner('A feature failed to load', err && err.message ? err.message : String(err));
+    }
+  }
+}
+
 initTheme();
 document.querySelector('#copyright-year').textContent = String(new Date().getFullYear());
 bind();
+registerFeatures();
+if (!isKnownView(state.view)) state.view = 'dashboard';
 if (mode === 'cloud') startCloud();
 else {
   renderAuth('local');
   records.connect();
+  store.attach(name => listBackend(name));
+  hooks.emit('auth', { user: null });
 }
+started = true;
 render();
+// The page's own "Loading…" line: the app has drawn its first view.
+document.querySelector('#app-loading').remove();
 startReminders();
 requestPermission();
 

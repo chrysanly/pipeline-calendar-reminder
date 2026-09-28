@@ -1,0 +1,116 @@
+/* Board page (js/views/kanban.js) and the stage totals it adds to Home. */
+
+.board-export { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.board-forecast { font-weight: var(--fw-semibold); }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-3);
+  align-items: start;
+}
+.board-loading { grid-column: 1 / -1; color: var(--muted); text-align: center; padding: var(--sp-8) 0; }
+
+.board-col {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+  padding: var(--sp-3);
+  border: 2px solid transparent;
+  border-top: 4px solid var(--st);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+.board-col.is-over { border-color: var(--st); background: var(--surface-3); }
+.board-col-head { display: grid; gap: 2px; }
+.board-col-title { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin: 0; font-size: var(--fs-md); color: var(--st-ink); }
+.board-col-total { margin: 0; font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--muted); overflow-wrap: anywhere; }
+
+.board-cards { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; min-height: 88px; }
+.board-empty {
+  display: grid;
+  place-items: center;
+  min-height: 88px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.board-card {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--st);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.board-card[draggable="true"] { cursor: grab; }
+.board-card.is-dragging { opacity: .5; }
+.card-name { margin: 0; font-size: var(--fs-base); font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.card-place { margin: 0; font-size: var(--fs-sm); color: var(--muted); }
+.card-value { margin: 0; font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
+.card-value.is-empty { font-weight: var(--fw-medium); color: var(--muted); }
+
+.card-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-2); }
+.card-stage, .deal-value, .deal-currency { min-height: var(--tap); min-width: 0; }
+.card-edit { min-height: var(--tap); white-space: nowrap; }
+
+.deal-form { display: grid; gap: var(--sp-2); }
+.deal-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: var(--sp-2); }
+.deal-value[aria-invalid="true"] { border-color: var(--danger); }
+.deal-error { margin: 0; font-size: var(--fs-sm); color: var(--danger); }
+.deal-error:empty { display: none; }
+.deal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.deal-actions button { min-height: var(--tap); }
+
+/* Home: value per stage and the weighted forecast, under the status cards. */
+.stage-totals {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-3) 0;
+}
+.stage-totals[hidden] { display: none; }
+.stage-total {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--st, var(--accent));
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.stage-total-label { font-size: var(--fs-xs); font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.stage-total-value { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stage-total.is-forecast { background: var(--accent-soft); }
+
+@media (max-width: 1100px) {
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stage-totals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Phones: swipe between columns, one and a bit in view. */
+@media (max-width: 640px) {
+  .board {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 85%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    padding-bottom: var(--sp-2);
+  }
+  .board-col { scroll-snap-align: start; }
+  .stage-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stage-total.is-forecast { grid-column: 1 / -1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-col { transition: none; }
+}

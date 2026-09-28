@@ -34,8 +34,14 @@
     import './history.test.js';
     import { groqTestsDone } from './groq.test.js';
     import { minutesTestsDone } from './minutes.test.js';
+    import { storeTestsDone } from './store.test.js';
+    import './registry.test.js';
+    import './deals.test.js';
+    import './timeline.test.js';
+    import './timetrack.test.js';
+    import { aiTestsDone } from './ai.test.js';
     import { report } from './runner.js';
-    await Promise.all([cloudTestsDone, recordsTestsDone, groqTestsDone, minutesTestsDone]);
+    await Promise.all([cloudTestsDone, recordsTestsDone, groqTestsDone, minutesTestsDone, storeTestsDone, aiTestsDone]);
     report();
   </script>
 </body>

@@ -1,0 +1,10 @@
+# Copy to worker/.dev.vars for `npx wrangler dev` (never commit .dev.vars).
+# In production set these with `npx wrangler secret put <NAME>` instead.
+
+# Groq API key: https://console.groq.com/keys
+GROQ_API_KEY=gsk_your_key_here
+# Access token for local mode (no sign-in): any long random string; enter the
+# same value in the app's AI panel.
+APP_TOKEN=change-me-to-a-long-random-string
+# Optional, for /notify email alerts: https://resend.com/api-keys
+RESEND_API_KEY=re_your_key_here

@@ -1,0 +1,21 @@
+# CladFlo Worker: AI (Groq) and email alerts (Resend) for the app.
+# Deploy: cd worker && npx wrangler deploy
+# Secrets (never in this file):
+#   npx wrangler secret put GROQ_API_KEY
+#   npx wrangler secret put APP_TOKEN        # local-mode access token (long random string)
+#   npx wrangler secret put RESEND_API_KEY   # optional, for /notify email alerts
+# Local development: copy .dev.vars.example to .dev.vars, then npx wrangler dev
+
+name = "cladflo-worker"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[vars]
+# Sites that may call the Worker, comma separated (no trailing slash).
+ALLOWED_ORIGINS = "https://pipeline-9944d.web.app,https://pipeline-9944d.firebaseapp.com,http://localhost:8000"
+# Firebase project whose sign-in tokens are accepted.
+FIREBASE_PROJECT_ID = "pipeline-9944d"
+RATE_LIMIT_PER_MINUTE = "20"
+# Email alerts: who they come from (a Resend-verified sender) and go to (only you).
+NOTIFY_FROM = "CladFlo <alerts@example.com>"
+NOTIFY_TO = "you@example.com"

@@ -101,6 +101,46 @@ export function cloudBackend(db, uid) {
   return collectionBackend(db, uid, 'events', normalizeEvent);
 }
 
+// ---------- client portal (portals/{token}, see firestore.rules) ----------
+
+/** Top-level collection of shared client pages; the token is the only key. */
+export const PORTALS = 'portals';
+
+/** Unguessable portal token: 32 hex characters from crypto. */
+export function newPortalToken(cryptoApi = globalThis.crypto) {
+  if (!cryptoApi || typeof cryptoApi.getRandomValues !== 'function') {
+    throw new Error('This browser cannot make a secure share link.');
+  }
+  const bytes = cryptoApi.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+export const isPortalToken = token => typeof token === 'string' && /^[0-9a-f]{32}$/.test(token);
+
+/**
+ * One owner's shared pages: publish (create or replace) and unpublish, plus
+ * the public read the portal page uses. Only the owner may write (rules).
+ */
+export function portalBackend(db, uid) {
+  const ref = token => {
+    if (!isPortalToken(token)) throw new Error('Invalid portal link.');
+    return db.collection(PORTALS).doc(token);
+  };
+  return {
+    async publish(token, data, now = new Date()) {
+      const doc = { ...data, ownerUid: uid, updatedAt: now.toISOString() };
+      await ref(token).set(doc);
+      return doc;
+    },
+    unpublish: token => ref(token).delete(),
+    /** The shared page, or null when the link was removed. */
+    async read(token) {
+      const snap = await ref(token).get();
+      return snap.exists ? { ...snap.data(), token } : null;
+    }
+  };
+}
+
 /** Initialise the compat SDK once; returns auth, db and sign-in helpers. */
 export function connectFirebase(firebaseSdk, config) {
   if (!firebaseSdk.apps || !firebaseSdk.apps.length) firebaseSdk.initializeApp(config);

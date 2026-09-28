@@ -31,7 +31,18 @@
   }
 
   function docRef(path) {
-    return { path, id: path.split('/').pop(), collection: name => collectionRef(`${path}/${name}`) };
+    return {
+      path,
+      id: path.split('/').pop(),
+      collection: name => collectionRef(`${path}/${name}`),
+      // Single-document calls (the client portal, portals/{token}).
+      async set(data) { apply([['set', path, data]], 'app'); },
+      async delete() { apply([['delete', path]], 'app'); },
+      async get() {
+        const data = docs.get(path);
+        return { id: path.split('/').pop(), exists: data !== undefined, data: () => (data === undefined ? undefined : clone(data)) };
+      }
+    };
   }
 
   function collectionRef(path) {

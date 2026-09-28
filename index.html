@@ -110,6 +110,12 @@
   </section>
 
   <main class="layout">
+    <!-- Shown until the app's first render (the module waits for the Firebase
+         scripts); app.js removes it. -->
+    <p id="app-loading" class="app-loading" role="status" aria-live="polite">
+      <span class="app-loading-spinner" aria-hidden="true"></span> Loading your reminders…
+    </p>
+
     <!-- Home: every client, their status and where they are. Filled by ui.js. -->
     <section id="dashboard" class="dashboard" aria-label="Clients dashboard" hidden>
       <div class="page-head">
@@ -244,7 +250,7 @@
       </section>
     </section>
 
-    <section class="calendar" aria-label="Calendar">
+    <section class="calendar" aria-label="Calendar" hidden>
       <div class="cal-toolbar">
         <div class="nav">
           <button id="prev" type="button" class="icon" aria-label="Previous"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
@@ -389,6 +395,43 @@
         <p id="groq-status" class="settings-status" role="status" aria-live="polite"></p>
         <p class="form-hint">No key yet? Create one for free at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com</a>.</p>
       </section>
+
+      <!-- Filled and saved by js/views/settings.js (users/{uid}/settings/app). -->
+      <form id="business-form" class="settings-section stack-form" aria-labelledby="business-title" novalidate>
+        <h3 id="business-title"><i class="fa-solid fa-briefcase" aria-hidden="true"></i> Business</h3>
+        <p class="form-hint">Used on invoices, proposals and the client portal. Saved to your account when signed in, or in this browser.</p>
+        <label>Currency
+          <select name="currency" id="biz-currency" aria-describedby="biz-currency-error"></select>
+        </label>
+        <p id="biz-currency-error" class="field-error"></p>
+        <label>Stripe Payment Link
+          <input type="url" name="stripeLink" id="biz-stripeLink" inputmode="url" autocomplete="off" placeholder="https://buy.stripe.com/…" aria-describedby="biz-stripeLink-error">
+        </label>
+        <p id="biz-stripeLink-error" class="field-error"></p>
+        <label>PayPal.me link
+          <input type="url" name="paypalLink" id="biz-paypalLink" inputmode="url" autocomplete="off" placeholder="https://paypal.me/yourname" aria-describedby="biz-paypalLink-error">
+        </label>
+        <p id="biz-paypalLink-error" class="field-error"></p>
+        <div class="row">
+          <label>GCash number
+            <input type="tel" name="gcashNumber" id="biz-gcashNumber" autocomplete="off" placeholder="09XX XXX XXXX" aria-describedby="biz-gcashNumber-error">
+          </label>
+          <label>GCash QR image link
+            <input type="url" name="gcashQr" id="biz-gcashQr" inputmode="url" autocomplete="off" placeholder="https://…/qr.png" aria-describedby="biz-gcashQr-error">
+          </label>
+        </div>
+        <p id="biz-gcashNumber-error" class="field-error"></p>
+        <p id="biz-gcashQr-error" class="field-error"></p>
+        <label>Worker URL
+          <input type="url" name="workerUrl" id="biz-workerUrl" inputmode="url" autocomplete="off" placeholder="https://pipeline.you.workers.dev" aria-describedby="biz-workerUrl-error">
+        </label>
+        <p id="biz-workerUrl-error" class="field-error"></p>
+        <p id="biz-worker-hint" class="form-hint">Runs AI and email for you. Blank uses the Worker set up for this site, if any.</p>
+        <div class="settings-actions">
+          <button id="biz-save" type="submit" class="primary"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save business settings</button>
+        </div>
+        <p id="biz-status" class="settings-status" role="status" aria-live="polite"></p>
+      </form>
 
       <section class="settings-section stack-form" aria-labelledby="data-title">
         <h3 id="data-title"><i class="fa-solid fa-database" aria-hidden="true"></i> Data</h3>

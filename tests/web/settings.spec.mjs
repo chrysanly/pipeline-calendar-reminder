@@ -54,7 +54,7 @@ test('the gear opens Settings; the close button and Escape close it', async ({ p
   await expect(page.locator('#settings')).toBeHidden();
   await page.locator('#settings-btn').click();
   await expect(page.locator('#settings')).toBeVisible();
-  await expect(page.locator('#settings h3')).toHaveText(['AI settings', 'Data']);
+  await expect(page.locator('#settings h3')).toHaveText(['AI settings', 'Business', 'Data']);
   await expect(page.locator('#groq-key')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.locator('#settings')).toBeHidden();
@@ -209,4 +209,126 @@ test('Clear all while signed out does nothing and says why', async ({ page }) =>
   await page.locator('#clear-confirm').fill('CLEAR');
   await page.locator('#clear-all').click();
   await expect(page.locator('#clear-status')).toHaveText('Sign in first.');
+});
+
+// ---------- Business (js/views/settings.js, settings/app in the generic store) ----------
+
+const SETTINGS_KEY = 'client-calendar.settings.v1';
+const FAKE_CONFIG = 'export const FIREBASE_CONFIG = {"apiKey":"fake","projectId":"demo-calendar","appId":"1:1:web:1"};';
+
+async function openCloud(page, seed = {}) {
+  await page.route('**/js/firebase-config.js', route => route.fulfill({ contentType: 'text/javascript', body: FAKE_CONFIG }));
+  await page.addInitScript({ path: join(here, 'fake-firebase.js') });
+  await page.addInitScript(seed => {
+    localStorage.setItem('view', 'month');
+    for (const [path, data] of Object.entries(seed)) window.__fake.seed(path, data);
+  }, seed);
+  await page.goto('/index.html');
+}
+
+async function fillBusiness(page, values) {
+  const form = page.locator('#business-form');
+  for (const [name, value] of Object.entries(values)) {
+    if (name === 'currency') await form.locator('[name="currency"]').selectOption(value);
+    else await form.locator(`[name="${name}"]`).fill(value);
+  }
+}
+
+test('Business: defaults to AED, flags bad fields and saves nothing until they are fixed', async ({ page }) => {
+  await openLocal(page);
+  await page.locator('#settings-btn').click();
+  const form = page.locator('#business-form');
+  await expect(form.locator('[name="currency"]')).toHaveValue('AED');
+  await expect(form.locator('[name="currency"] option')).toHaveText(['AED', 'USD', 'EUR', 'GBP', 'SAR', 'PHP', 'INR']);
+
+  await fillBusiness(page, { stripeLink: 'http://buy.stripe.com/x', gcashNumber: '12345', workerUrl: 'not a url' });
+  await page.locator('#biz-save').click();
+  await expect(page.locator('#biz-status')).toHaveText('Fix the highlighted fields.');
+  await expect(page.locator('#biz-stripeLink-error')).toHaveText('Enter the https:// Stripe Payment Link.');
+  await expect(page.locator('#biz-gcashNumber-error')).toContainText('PH mobile number');
+  await expect(page.locator('#biz-workerUrl-error')).toHaveText('Enter the https:// address of your Worker.');
+  await expect(form.locator('[name="stripeLink"]')).toHaveAttribute('aria-invalid', 'true');
+  await expect(form.locator('[name="stripeLink"]')).toBeFocused();
+  await expect(page.locator('#biz-paypalLink-error')).toBeHidden();
+  expect(await stored(page, SETTINGS_KEY)).toBeNull();
+});
+
+test('Business (local): saves tidied values in this browser and keeps them after a reload', async ({ page }) => {
+  await openLocal(page);
+  await page.locator('#settings-btn').click();
+  await fillBusiness(page, {
+    currency: 'USD',
+    stripeLink: 'buy.stripe.com/abc',
+    paypalLink: 'https://paypal.me/chrys/',
+    gcashNumber: '0917 123 4567',
+    workerUrl: 'https://pipeline.demo.workers.dev/'
+  });
+  await page.locator('#business-form [name="workerUrl"]').press('Enter');
+  await expect(page.locator('#biz-status')).toHaveText('Business settings saved.');
+  await expect(page.locator('#business-form [name="stripeLink"]')).toHaveValue('https://buy.stripe.com/abc');
+
+  const [saved] = await stored(page, SETTINGS_KEY);
+  expect(saved).toMatchObject({
+    id: 'app', currency: 'USD', stripeLink: 'https://buy.stripe.com/abc', paypalLink: 'https://paypal.me/chrys',
+    gcashNumber: '09171234567', gcashQr: '', workerUrl: 'https://pipeline.demo.workers.dev'
+  });
+  expect(saved.createdAt).toBeTruthy();
+
+  await page.reload();
+  await page.waitForSelector('#grid .day');
+  await page.locator('#settings-btn').click();
+  await expect(page.locator('#business-form [name="currency"]')).toHaveValue('USD');
+  await expect(page.locator('#business-form [name="gcashNumber"]')).toHaveValue('09171234567');
+  await expect(page.locator('#biz-status')).toHaveText('');
+});
+
+test('Business (cloud): saves to users/{uid}/settings/app and picks up a change from another device', async ({ page }) => {
+  await openCloud(page, { 'users/user-1/settings/app': { currency: 'EUR', paypalLink: 'https://paypal.me/old' } });
+  await page.locator('#sign-in').click();
+  await expect(page.locator('#account')).toBeVisible();
+
+  await page.locator('#settings-btn').click();
+  await expect(page.locator('#business-form [name="currency"]')).toHaveValue('EUR');
+  await expect(page.locator('#business-form [name="paypalLink"]')).toHaveValue('https://paypal.me/old');
+  await fillBusiness(page, { currency: 'GBP', gcashQr: 'https://example.com/qr.png' });
+  await page.locator('#biz-save').click();
+  await expect(page.locator('#biz-status')).toHaveText('Business settings saved.');
+  const docs = await page.evaluate(() => window.__fake.dump());
+  expect(docs['users/user-1/settings/app']).toMatchObject({ currency: 'GBP', paypalLink: 'https://paypal.me/old', gcashQr: 'https://example.com/qr.png' });
+  expect(Object.keys(docs).filter(p => p.includes('/settings/'))).toEqual(['users/user-1/settings/app']);
+
+  // Closed dialog: a save from another device shows next time it opens.
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => window.__fake.remoteSet('users/user-1/settings/app', { currency: 'SAR' }));
+  await page.locator('#settings-btn').click();
+  await expect(page.locator('#business-form [name="currency"]')).toHaveValue('SAR');
+  await expect(page.locator('#business-form [name="paypalLink"]')).toHaveValue('');
+});
+
+test('Business while signed out says to sign in and writes nothing', async ({ page }) => {
+  await openCloud(page);
+  await expect(page.locator('#signed-out')).toBeVisible();
+  await page.locator('#settings-btn').click();
+  await fillBusiness(page, { currency: 'USD' });
+  await page.locator('#biz-save').click();
+  await expect(page.locator('#biz-status')).toHaveText('Sign in first.');
+  expect(await page.evaluate(() => window.__fake.appWrites())).toEqual([]);
+});
+
+test('phone: the Business section fits 390px and its fields and Save are at least 44px tall', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openLocal(page);
+  await page.locator('#settings-btn').click();
+  const form = page.locator('#business-form');
+  await form.scrollIntoViewIfNeeded();
+  const card = await page.locator('#settings .modal-card').boundingBox();
+  expect(card.x).toBeGreaterThanOrEqual(0);
+  expect(card.x + card.width).toBeLessThanOrEqual(390);
+  for (const control of await form.locator('input, select, button').all()) {
+    await control.scrollIntoViewIfNeeded();
+    const box = await control.boundingBox();
+    expect(box.height, await control.getAttribute('name') || await control.getAttribute('id')).toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

@@ -18,6 +18,7 @@ firebase-debug*.log
 .env.*
 !.env.example
 js/firebase-config.js
+js/app-config.js
 
 # Editor/OS junk
 ~$*
@@ -27,3 +28,7 @@ Thumbs.db
 # Real client data: never commit. Tests that need it skip when it's absent;
 # everything else uses the made-up tests/fixtures/sample.xlsx.
 tests/fixtures/test-data-pipeline.xlsx
+
+# Cloudflare Worker local secrets (see worker/.dev.vars.example)
+worker/.dev.vars
+worker/.wrangler/

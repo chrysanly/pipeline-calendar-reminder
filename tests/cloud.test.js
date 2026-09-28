@@ -1,6 +1,7 @@
 import { test, assert, assertEqual, assertDeepEqual, fakeStorage } from './runner.js';
 import {
-  diffEvents, planMigration, selectBackend, isConfigured, cloudBackend, collectionBackend
+  diffEvents, planMigration, selectBackend, isConfigured, cloudBackend, collectionBackend,
+  PORTALS, newPortalToken, isPortalToken, portalBackend
 } from '../js/cloud.js';
 import { localBackend, STORAGE_KEY } from '../js/storage.js';
 
@@ -104,7 +105,15 @@ function fakeDb() {
   return {
     docs,
     commits,
-    collection: name => ({ doc: id => ({ collection: sub => col(`${name}/${id}/${sub}`) }) }),
+    collection: name => ({
+      doc: id => ({
+        path: `${name}/${id}`,
+        collection: sub => col(`${name}/${id}/${sub}`),
+        set: async data => { docs.set(`${name}/${id}`, data); },
+        delete: async () => { docs.delete(`${name}/${id}`); },
+        get: async () => ({ exists: docs.has(`${name}/${id}`), data: () => docs.get(`${name}/${id}`) })
+      })
+    }),
     batch() {
       const ops = [];
       return {
@@ -179,6 +188,57 @@ later('collectionBackend writes meetings and history at users/{uid}/<name>/{id}'
   assertDeepEqual(list, [{ action: 'create', id: 'h1', normalized: true }]);
   await meetings.write([{ id: 'm1', title: 'Kickoff' }], []);
   assertDeepEqual([...db.docs.keys()], ['users/uid-1/history/h1']);
+});
+
+// ---------- client portal ----------
+
+test('newPortalToken: 32 hex characters from crypto, different every time', () => {
+  const token = newPortalToken();
+  assert(isPortalToken(token), `bad token ${token}`);
+  assert(newPortalToken() !== token, 'tokens repeat');
+  const fixed = { getRandomValues: bytes => bytes.fill(171) };
+  assertEqual(newPortalToken(fixed), 'ab'.repeat(16));
+});
+
+test('newPortalToken refuses to make a weak link without crypto', () => {
+  let message = '';
+  try {
+    newPortalToken(null);
+  } catch (err) {
+    message = err.message;
+  }
+  assert(/secure share link/.test(message), message);
+});
+
+test('isPortalToken accepts only 32 lower-case hex characters', () => {
+  assert(isPortalToken('0123456789abcdef0123456789abcdef'));
+  for (const bad of ['', 'abc', '0123456789ABCDEF0123456789ABCDEF', '../users/uid-1/events/x0000000000', null, 42]) {
+    assert(!isPortalToken(bad), `accepted ${bad}`);
+  }
+});
+
+later('portalBackend publishes a page with the owner, reads it back and unpublishes it', async () => {
+  const db = fakeDb();
+  const portal = portalBackend(db, 'uid-1');
+  const token = 'ab'.repeat(16);
+  const doc = await portal.publish(token, { clientName: 'Acme', invoices: [] }, new Date('2026-09-28T08:00:00.000Z'));
+  assertDeepEqual(doc, { clientName: 'Acme', invoices: [], ownerUid: 'uid-1', updatedAt: '2026-09-28T08:00:00.000Z' });
+  assertDeepEqual([...db.docs.keys()], [`${PORTALS}/${token}`]);
+  assertEqual((await portal.read(token)).token, token);
+  await portal.unpublish(token);
+  assertEqual(await portal.read(token), null);
+});
+
+later('portalBackend rejects a malformed token before touching Firestore', async () => {
+  const db = fakeDb();
+  let message = '';
+  try {
+    await portalBackend(db, 'uid-1').publish('users/uid-2', {});
+  } catch (err) {
+    message = err.message;
+  }
+  assertEqual(message, 'Invalid portal link.');
+  assertEqual(db.docs.size, 0);
 });
 
 export const cloudTestsDone = Promise.all(pending);

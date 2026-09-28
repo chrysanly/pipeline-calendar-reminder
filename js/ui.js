@@ -17,8 +17,44 @@ export const STATUS_ICONS = {
 };
 export const STATUS_PLURALS = { lead: 'Leads', potential: 'Potential', active: 'Active', inactive: 'Inactive' };
 
-// Views with their own page; the rest are the calendar.
+// Views with their own page; the rest are the calendar. mountView adds more.
 const PAGES = { dashboard: '#dashboard', history: '#history', minutes: '#minutes' };
+
+/** Link a feature stylesheet once; the built page already inlines it (data-css). */
+export function loadStylesheet(href) {
+  if (document.querySelector(`[data-css="${href}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  link.dataset.css = href;
+  document.head.appendChild(link);
+}
+
+/**
+ * A registered view's page (<section id="page-<id>">) in the main layout and,
+ * unless view.nav is false, its button in the main nav. Returns the section.
+ */
+export function mountView(view, onSelect) {
+  if (view.css) loadStylesheet(view.css);
+  const section = el('section', `page feature-page page-${view.id}`);
+  section.id = `page-${view.id}`;
+  section.setAttribute('aria-label', view.label);
+  section.hidden = true;
+  $('.layout').insertBefore(section, $('.calendar'));
+  PAGES[view.id] = `#${section.id}`;
+
+  if (view.nav !== false) {
+    const button = el('button');
+    button.id = `view-${view.id}`;
+    button.type = 'button';
+    button.dataset.view = view.id;
+    button.title = view.key ? `${view.label} (${view.key.toUpperCase()})` : view.label;
+    button.append(icon(view.icon || 'fa-circle'), ' ', el('span', 'btn-label', view.label));
+    button.addEventListener('click', () => onSelect(view.id));
+    $('.views').appendChild(button);
+  }
+  return section;
+}
 
 /**
  * Show one page or the calendar, and mark the active buttons: the main nav

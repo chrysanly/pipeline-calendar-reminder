@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { parseEnv, readEnv, configFromEnv, generateConfig, missingKeys, ENV_KEYS } from '../scripts/gen-config.mjs';
+import {
+  parseEnv, readEnv, configFromEnv, generateConfig, missingKeys, ENV_KEYS, APP_ENV_KEYS, appConfigFromEnv
+} from '../scripts/gen-config.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const tmp = mkdtempSync(join(tmpdir(), 'pipeline-config-'));
@@ -82,6 +84,30 @@ test('real environment variables override .env; blank ones do not', () => {
   assertEqual(values.FIREBASE_PROJECT_ID, 'demo-app', 'a blank variable does not wipe the file value');
   const onlyEnv = readEnv({ envFile: join(tmp, 'none.env'), env: { FIREBASE_API_KEY: 'k', FIREBASE_PROJECT_ID: 'p', FIREBASE_APP_ID: 'a' } });
   assertDeepEqual(configFromEnv(onlyEnv), { apiKey: 'k', projectId: 'p', appId: 'a' });
+});
+
+test('WORKER_URL and GOOGLE_OAUTH_CLIENT_ID become APP_CONFIG, blanks left out', () => {
+  const values = readEnv({
+    envFile: envFile(`${FULL}WORKER_URL=https://pipeline.demo.workers.dev/\nGOOGLE_OAUTH_CLIENT_ID=123-abc.apps.googleusercontent.com\n`),
+    env: NO_ENV
+  });
+  assertDeepEqual(appConfigFromEnv(values), {
+    workerUrl: 'https://pipeline.demo.workers.dev',
+    googleClientId: '123-abc.apps.googleusercontent.com'
+  });
+  assertDeepEqual(appConfigFromEnv(readEnv({ envFile: join(root, '.env.example'), env: NO_ENV })), {});
+  assertDeepEqual(Object.keys(APP_ENV_KEYS), ['WORKER_URL', 'GOOGLE_OAUTH_CLIENT_ID']);
+  const fromEnv = readEnv({ envFile: join(tmp, 'none.env'), env: { WORKER_URL: 'https://ci.workers.dev' } });
+  assertDeepEqual(appConfigFromEnv(fromEnv), { workerUrl: 'https://ci.workers.dev' });
+});
+
+test('generateConfig writes APP_CONFIG to app-config.js next to firebase-config.js', () => {
+  const dir = mkdtempSync(join(tmp, 'app-'));
+  const out = join(dir, 'firebase-config.js');
+  generateConfig({ envFile: envFile(`WORKER_URL=https://w.demo.workers.dev\n`), env: NO_ENV, out });
+  const app = readFileSync(join(dir, 'app-config.js'), 'utf8');
+  assert(/export const APP_CONFIG = \{\n  "workerUrl": "https:\/\/w\.demo\.workers\.dev"\n\};/.test(app), app);
+  assert(/export const FIREBASE_CONFIG = \{\};/.test(readFileSync(out, 'utf8')), 'firebase config still empty');
 });
 
 // generateConfig writes a real module; import it to prove it is valid JS.

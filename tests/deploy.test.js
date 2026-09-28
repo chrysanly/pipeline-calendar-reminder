@@ -17,9 +17,22 @@ test('firestore.rules only lets a user touch users/{their uid}/…', () => {
   assert(rules.includes("rules_version = '2'"), 'rules v2');
   assert(/match \/users\/\{uid\}\/\{doc=\*\*\}/.test(rules), 'no users/{uid}/{doc=**} match');
   assert(/allow read, write: if request\.auth != null && request\.auth\.uid == uid;/.test(rules), 'no uid check');
-  // A single allow: nothing outside users/{uid} is reachable.
-  assertEqual((rules.match(/\ballow\b/g) || []).length, 1, 'unexpected extra allow rule');
+  // Besides users/{uid}, only the client portal is reachable.
+  const outside = rules.replace(/match \/users\/\{uid\}\/\{doc=\*\*\} \{[^}]*\}/, '');
+  const matches = [...outside.matchAll(/match \/([^ ]+) \{/g)].map(m => m[1]);
+  assertEqual(JSON.stringify(matches), JSON.stringify(['databases/{database}/documents', 'portals/{token}', 'replies/{replyId}']), 'unexpected match block');
   assert(!/if true/.test(rules), 'rules must never allow everything');
+  assert(!/allow (?:read|list|write)[^;]*;/.test(outside.replace(/allow read, delete: if signedIn\(\) && portalOwner\(\) == request\.auth\.uid;/, '')), 'portal pages must not be listable or freely writable');
+});
+
+test('firestore.rules: a portal page is read by its link only and written by its owner only', () => {
+  const rules = read('firestore.rules');
+  assert(/allow get: if token\.matches\('\^\[0-9a-f\]\{32\}\$'\);/.test(rules), 'get by a 32-hex token');
+  assert(/allow create: if signedIn\(\) && request\.resource\.data\.ownerUid == request\.auth\.uid;/.test(rules), 'create as yourself');
+  assert(/allow update: if isOwner\(\) && request\.resource\.data\.ownerUid == request\.auth\.uid;/.test(rules), 'update keeps the owner');
+  assert(/allow delete: if isOwner\(\);/.test(rules), 'owner deletes');
+  assert(/resource\.data\.ownerUid == request\.auth\.uid/.test(rules), 'isOwner checks the stored owner');
+  assert(/keys\(\)\.hasOnly\(\['type', 'itemId', 'name', 'message', 'createdAt'\]\)/.test(rules), 'replies limited to known fields');
 });
 
 test('firebase.json serves the single-file build and deploys the rules', () => {

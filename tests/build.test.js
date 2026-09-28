@@ -41,6 +41,16 @@ test('build strips all import/export statements', () => {
   assert(!/^\s*export\s/m.test(bundledJs), 'residual export statement in bundle');
 });
 
+test('the bundle follows the imports from app.js, into js/views/ too, dependencies first', () => {
+  const at = file => bundledJs.indexOf(`// ---- js/${file} ----`);
+  for (const file of ['store.js', 'hooks.js', 'features.js', 'views/registry.js', 'views/settings.js', 'app-config.js']) {
+    assert(at(file) !== -1, `js/${file} is not in the bundle`);
+  }
+  assert(at('cloud.js') < at('store.js') && at('store.js') < at('views/settings.js'), 'store.js must come after cloud.js and before its users');
+  assert(at('ui.js') < at('views/settings.js') && at('views/settings.js') < at('features.js'), 'views/settings.js out of order');
+  assert(at('app.js') > at('features.js'), 'app.js must come last');
+});
+
 test('every element id the bundle queries exists in the emitted HTML', () => {
   const ids = new Set();
   for (const m of bundledJs.matchAll(/['"`]#([A-Za-z][\w-]*)['"`]/g)) {
