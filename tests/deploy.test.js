@@ -34,7 +34,7 @@ test('firebase.json serves the single-file build and deploys the rules', () => {
 test('npm run deploy checks the setup before calling firebase', () => {
   const { scripts } = JSON.parse(read('package.json'));
   assert(scripts.deploy.startsWith('npm run check:firebase && '), scripts.deploy);
-  assert(scripts.deploy.includes('firebase deploy --only hosting,firestore:rules'), scripts.deploy);
+  assert(scripts.deploy.includes('npx --yes firebase-tools deploy --only hosting,firestore:rules'), 'deploy runs the CLI through npx');
 });
 
 /** Run check:firebase against a given .env file and environment. */

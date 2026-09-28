@@ -189,10 +189,17 @@ test('mergeImported: importing twice does not duplicate', () => {
   assertEqual(again.events.find(e => e.id === 'own').title, 'Mine');
 });
 
-test('importSummary reports counts and where undated rows went', () => {
+test('importSummary reports new and duplicate counts and where undated rows went', () => {
   const result = rowsToEvents(ROWS, { selectedKey: SEL, now: NOW });
-  assertEqual(importSummary(result, 'Sun, 27 September 2026'),
-    'Imported 3 reminders (1 without a date → Sun, 27 September 2026, 1 skipped)');
+  const first = mergeImported([], result.events);
+  assertEqual(importSummary(result, 'Sun, 27 September 2026', first),
+    'Imported 3 reminders: 3 new, 0 duplicates (1 without a date → Sun, 27 September 2026, 1 skipped)');
+  // The same file again: every row is a duplicate.
+  const again = mergeImported(first.events, rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
+  assertEqual(importSummary(result, 'Sun, 27 September 2026', again),
+    'Imported 3 reminders: 0 new, 3 duplicates (1 without a date → Sun, 27 September 2026, 1 skipped)');
+  assertEqual(importSummary({ events: result.events.slice(0, 1), skipped: 0 }, 'X', { added: 0, updated: 1 }),
+    'Imported 1 reminder: 0 new, 1 duplicate (0 without a date → X, 0 skipped)');
 });
 
 // ---------- phone, location and status columns ----------

@@ -68,8 +68,11 @@ export function formatDayLabel(key) {
   return `${WEEKDAY_NAMES[date.getDay()]}, ${date.getDate()} ${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-/** 'dashboard' is the Home page; the other three are calendar views. */
-export const VIEWS = ['dashboard', 'day', 'week', 'month'];
+/** The views that show a date range; prev/next/Today move through them. */
+export const CALENDAR_VIEWS = ['day', 'week', 'month'];
+
+/** 'dashboard' is the Home page, then the calendar, Minutes and the History log. */
+export const VIEWS = ['dashboard', ...CALENDAR_VIEWS, 'minutes', 'history'];
 
 const shortMonth = date => MONTH_NAMES[date.getMonth()].slice(0, 3);
 

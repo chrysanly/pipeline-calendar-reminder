@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Pipeline logo" width="96" height="96">
+  <img src="assets/logo.svg" alt="CladFlo logo" width="96" height="96">
 </p>
 
-<h1 align="center">Pipeline — Client Reminders &amp; BD Calendar</h1>
+<h1 align="center">CladFlo — Client Reminders &amp; BD Calendar</h1>
 
 <p align="center">
   Track leads, potential, active and inactive clients, get real-time reminders, and turn BD notes from Excel into a calendar.
@@ -10,7 +10,7 @@
   <a href="https://pipeline-9944d.web.app"><strong>Open the live app →</strong></a>
 </p>
 
-![Pipeline dashboard](docs/screenshots/dashboard-light.png)
+![CladFlo dashboard](docs/screenshots/dashboard-light.png)
 
 ## Features
 
@@ -88,6 +88,36 @@ your PC, phone and every open tab, and cached for offline use. Each person can
 only read and write their own data. Reminders already saved in the browser are
 moved to the cloud once, on the first sign-in.
 
+### Meeting minutes (free, with Groq)
+
+Open **Minutes** (or press `N`), pick the client and date, then paste a
+transcript or import a `.txt`, `.md`, `.vtt` or `.srt` file. **Generate** sends
+it to Groq's free API: long transcripts go part by part ("Part 2 of 5…") and
+are merged into one set of minutes (title, attendees, summary, decisions,
+action items with owner and due date). Edit anything, then **Save minutes**.
+Only the minutes are saved, never the transcript. Each client has its own
+list of saved minutes, with Copy and Delete.
+
+Each teammate uses their own free Groq key: create one at
+[console.groq.com](https://console.groq.com/keys), then paste it in
+**Settings** (gear) → **AI settings**. The key is stored in that browser only.
+It is never synced to Firebase, never logged, and not part of `.env` or the build.
+The model is Llama 3.3 70B by default; Llama 3.1 8B is faster and has higher
+free limits. Busy (429) and server errors are retried up to 5 times.
+
+### History log
+
+**History** (or `L`) lists every change, newest first: reminders created,
+edited or deleted, status changes, imports, minutes saved or deleted, and
+Clear all. Filter by action or client, or search. The newest 500 entries are
+kept, synced like the reminders.
+
+### Clear all data
+
+**Settings** → **Data** → type `CLEAR` → **Clear all data** deletes every
+reminder and every set of minutes (in your account, or in this browser in
+local mode). One History entry records it; the History log itself is kept.
+
 ## Tech stack
 
 - **Vanilla HTML, CSS and JavaScript** (ES modules), no framework
@@ -154,7 +184,8 @@ names override `.env`. `npm run deploy` refuses to run while a value is missing:
 **First time on a new Firebase project:** create the project, add a **Web app**,
 create a **Firestore** database (production mode), enable **Google** under
 Authentication → Sign-in method, put the project ID in `.firebaserc`, then
-`npm install -g firebase-tools` and `firebase login` once.
+run `npx firebase-tools login` once (no global install needed; `npm run deploy`
+also runs the CLI through npx).
 
 **Is this a secret?** The Firebase *web* config is public by design: it ends up
 in the built site, and every visitor's browser receives it. What protects your
@@ -199,7 +230,8 @@ Dates and other text are never mistaken for phone numbers.
 
 ```
 index.html               app shell, SEO / social tags
-css/styles.css           all styles (light/dark, phone, tablet)
+css/styles.css           core styles (light/dark, phone, tablet)
+css/features.css         Minutes, History and Settings styles
 assets/                  logo.svg, favicons, install icons, og-image, manifest, robots, sitemap
 js/
   calendar.js            date and grid logic (pure)
@@ -209,9 +241,18 @@ js/
   importer.js            Excel rows → reminders (pure; SheetJS passed in)
   dashboard.js           clients, status counts, location tree, filters (pure)
   firebase-config.js     GENERATED from .env by npm run config (git-ignored)
-  cloud.js               Firestore backend, diff and one-time migration
+  cloud.js               Firestore backend for any collection, diff and one-time migration
+  records.js             meetings / history storage: this browser or users/{uid}/<name>
+  history.js             History entries, filters, relative times (pure)
+  transcript.js          .txt/.md/.vtt/.srt transcript → text, speakers, words (pure)
+  groq.js                Groq key and model (this browser only), chat with retries, chunking
+  minutes.js             two-step minutes prompts, JSON repair, Copy text (pure)
+  record-store.js        live meetings and history lists
   theme.js               light / dark
-  ui.js                  rendering
+  ui.js                  rendering (calendar, panel, dashboard, form)
+  settings-ui.js         Settings modal: AI settings, Clear all data
+  history-ui.js          History view
+  minutes-ui.js          Minutes view
   app.js                 state, events, startup
 build.mjs                bundles everything into dist/
 scripts/                 gen-config (.env → config), check-firebase (deploy guard), make-icons, screenshots
@@ -230,13 +271,16 @@ firestore.rules          per-user access rules
   reminder timing, phone → location, the Excel parser and importer, dashboard
   grouping and filters, Firestore diff and migration, the build output (inlined
   code, SEO tags, every linked file present, a valid `favicon.ico`, the
-  manifest) and the Firebase deploy setup.
+  manifest), the Firebase deploy setup, transcript parsing, the History log,
+  meetings/history storage, the Groq client (retries, 401, chunking, against a
+  fake `fetch`) and the minutes prompts and JSON repair.
 - **Browser** (`npx playwright test`): creating, editing and deleting
   reminders; Day/Week/Month views and keyboard shortcuts; the details panel;
   popups with a mocked clock and Notification; Excel import; the dashboard's
   counts, filters and status changes; light/dark; Google sign-in, live sync and
   migration against a fake Firebase; the built file opened from disk; icons,
-  manifest and SEO tags; and a phone/tablet pass at 390, 360 and 768 px (no
+  manifest and SEO tags; History, Settings, Clear all (local and cloud) and
+  Minutes with a mocked Groq (a 3-part transcript, a 429 then a retry); and a phone/tablet pass at 390, 360 and 768 px (no
   sideways scrolling, 44 px buttons, bottom sheet, swipe).
 
 A test that uses a private real-world export is skipped when that file is not
@@ -244,4 +288,4 @@ present, so a fresh clone runs green.
 
 ---
 
-<p align="center">© 2026 Pipeline · Built by <a href="https://portfolio-v2-mu-roan.vercel.app/">chrys</a></p>
+<p align="center">© 2026 CladFlo · Built by <a href="https://portfolio-v2-mu-roan.vercel.app/">chrys</a></p>

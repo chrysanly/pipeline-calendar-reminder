@@ -1,0 +1,256 @@
+/* Home dashboard: status cards, locations and the client list. */
+
+.dashboard { flex: 1 1 auto; min-width: 0; display: grid; gap: var(--sp-5); align-content: start; }
+
+/* ---------- status cards ---------- */
+
+.status-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); }
+
+.status-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: var(--sp-3);
+  align-items: center;
+  min-height: 84px;
+  padding: var(--sp-4);
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--stroke) solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 3px 0 var(--border);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.status-card .status-icon {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  font-size: var(--fs-lg);
+  color: var(--st-ink);
+  background: color-mix(in srgb, var(--st) 22%, transparent);
+  border-radius: 50%;
+}
+.status-count { font-size: var(--fs-2xl); font-weight: var(--fw-black); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.status-label { font-size: var(--fs-sm); font-weight: var(--fw-bold); color: var(--muted); }
+
+.status-card.is-active {
+  background: color-mix(in srgb, var(--st) 12%, var(--surface));
+  border-color: var(--outline);
+  box-shadow: 0 3px 0 var(--outline);
+}
+.status-card:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+
+/* ---------- body: locations + clients ---------- */
+
+.dash-body { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--sp-5); align-items: start; }
+
+.dash-card { min-width: 0; padding: var(--sp-5); box-shadow: var(--shadow); }
+.client-count { font-weight: var(--fw-semibold); color: var(--muted); }
+
+.location-list { display: grid; gap: var(--sp-2); }
+.loc-group { display: grid; gap: 2px; align-content: start; }
+.loc-cities { display: grid; gap: 2px; padding-left: var(--sp-4); }
+
+.loc-tag {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: var(--tap);
+  padding: 4px 10px;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: var(--stroke) solid transparent;
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.loc-tag .fa-solid { width: 14px; color: var(--accent-ink); }
+.loc-country { font-weight: var(--fw-bold); }
+.loc-name { min-width: 0; overflow-wrap: anywhere; }
+.loc-count { margin-left: auto; }
+.loc-tag.is-active { background: var(--accent-soft); border-color: var(--accent); }
+
+.dash-clients-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-3); }
+.dash-clients-head .dash-title { margin: 0; }
+.client-filters { display: flex; flex: 0 1 480px; gap: var(--sp-2); min-width: 0; }
+.client-filters .client-search { flex: 1 1 240px; }
+.client-filters select { flex: 0 0 auto; width: auto; }
+
+/* Pager under the client list: count, page size, prev / page n of m / next. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: var(--stroke) solid var(--border);
+}
+.pager[hidden] { display: none; }
+.pager-info { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pager-size { display: inline-flex; align-items: center; gap: var(--sp-2); font-weight: var(--fw-semibold); color: var(--muted); }
+.pager-size select { width: auto; }
+.pager .page-size-custom { width: 96px; }
+.pager-nav { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.page-label { min-width: 96px; font-weight: var(--fw-bold); text-align: center; font-variant-numeric: tabular-nums; }
+
+.active-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--sp-3); }
+.active-filters:empty { display: none; }
+
+/* ---------- client list ---------- */
+
+.client-list { display: grid; margin-top: var(--sp-2); }
+
+.client-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) 136px minmax(120px, 1.2fr) minmax(120px, 1fr) 70px minmax(150px, 1.3fr);
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-2);
+  font-size: var(--fs-md);
+  border-bottom: 1px solid var(--border);
+}
+.client-row:last-child { border-bottom: 0; }
+
+.client-head {
+  padding-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--muted);
+}
+
+.client-name {
+  min-height: var(--tap);
+  padding: 0;
+  font-weight: var(--fw-bold);
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  overflow-wrap: anywhere;
+}
+
+.client-status {
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 6px 10px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--st-ink);
+  background: color-mix(in srgb, var(--st) 14%, var(--surface));
+  border: var(--stroke) solid var(--st);
+  border-radius: var(--radius-pill);
+}
+
+.client-place, .client-phone, .client-reminders, .client-next {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.client-row .fa-solid { flex: none; color: var(--accent-ink); }
+.client-phone a { color: inherit; }
+.dash-empty { padding: var(--sp-6) var(--sp-2); font-size: var(--fs-md); text-align: center; }
+
+@media (hover: hover) {
+  .status-card:hover { border-color: var(--st); }
+  .loc-tag:hover { background: var(--accent-soft); }
+  .client-row:not(.client-head):hover { background: var(--surface-2); }
+  .client-name:hover { color: var(--accent-ink); text-decoration: underline; }
+}
+
+@media (max-width: 1100px) {
+  .status-cards { gap: var(--sp-3); }
+  .dash-body { grid-template-columns: minmax(0, 1fr); }
+  .location-list { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--sp-2) var(--sp-4); }
+}
+
+/* Tablet and phone: tighter status cards. */
+@media (max-width: 900px) {
+  .status-card { padding: var(--sp-3); column-gap: 10px; }
+  .status-card .status-icon { width: 38px; height: 38px; }
+}
+
+/* Clients as cards whenever the list itself is narrow: phones, tablets, and
+   desktop with the details panel open (the table's columns need ~780px). */
+.dash-clients { container-type: inline-size; }
+@container (max-width: 780px) {
+  .client-head { display: none; }
+  .client-list { gap: var(--sp-3); }
+  .client-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "name status"
+      "place phone"
+      "next reminders";
+    gap: var(--sp-2) var(--sp-3);
+    padding: var(--sp-3) var(--sp-4);
+    background: var(--surface-2);
+    border: var(--stroke) solid var(--border);
+    border-left: 6px solid var(--st);
+    border-radius: var(--radius);
+  }
+  .client-row:last-child { border-bottom: var(--stroke) solid var(--border); }
+  .client-name { grid-area: name; font-size: var(--fs-base); }
+  .client-status { grid-area: status; justify-self: end; width: min(100%, 150px); }
+  .client-place { grid-area: place; }
+  .client-phone { grid-area: phone; }
+  .client-next { grid-area: next; }
+  .client-reminders { grid-area: reminders; justify-self: end; }
+}
+
+@media (max-width: 640px) {
+  .dashboard { gap: var(--sp-3); }
+  .status-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+  .status-card { min-height: 0; padding: var(--sp-3); column-gap: 10px; }
+  .status-card .status-icon { width: 36px; height: 36px; font-size: var(--fs-md); }
+  .status-count { font-size: var(--fs-xl); }
+  .dash-body { gap: var(--sp-3); }
+  .dash-card { padding: var(--sp-4); border-radius: var(--radius-lg); }
+
+  /* Locations: one horizontally scrolling row of pills, inside the card. */
+  .location-list {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--sp-2);
+    margin: 0 calc(-1 * var(--sp-4));
+    padding: 0 var(--sp-4) var(--sp-1);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .location-list::-webkit-scrollbar { display: none; }
+  .loc-group, .loc-cities { display: contents; }
+  .loc-tag {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 0 14px;
+    white-space: nowrap;
+    border-color: var(--border);
+  }
+  .loc-cities .loc-tag { font-weight: 400; }
+
+  .dash-clients-head { flex-direction: column; align-items: stretch; }
+  .client-filters { flex: none; width: 100%; }
+  .client-filters .client-search { flex: 1 1 auto; }
+
+  .pager { display: grid; grid-template-columns: 1fr auto; }
+  .pager-nav { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr auto; }
+  .pager-nav .btn-label { display: none; }
+
+  .client-row {
+    grid-template-areas:
+      "name status"
+      "place place"
+      "phone reminders"
+      "next next";
+  }
+}

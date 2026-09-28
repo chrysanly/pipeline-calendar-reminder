@@ -1,7 +1,7 @@
 // Day / Week / Month views: cell counts, labels, navigation, persistence.
 
 import { test, expect } from './fixtures.mjs';
-import { openApp } from './helpers.mjs';
+import { openApp, goToView } from './helpers.mjs';
 import { formatRangeLabel, shiftCursor } from '../../js/calendar.js';
 
 const now = new Date();
@@ -23,7 +23,7 @@ test('month view: 42 days, weekday headers and the month label', async ({ page }
 for (const view of ['day', 'week', 'month']) {
   test(`${view} view renders ${CELLS[view]} cell(s) and the right label`, async ({ page }) => {
     // Start from a different view so every switch really changes something.
-    await page.locator(view === 'month' ? '#view-week' : '#view-month').click();
+    await goToView(page, view === 'month' ? 'week' : 'month');
     await page.locator(`#view-${view}`).click();
 
     await expect(page.locator(`#view-${view}`)).toHaveClass(/is-active/);
@@ -49,7 +49,7 @@ for (const view of ['day', 'week', 'month']) {
 }
 
 test('week view marks today in the header and the column', async ({ page }) => {
-  await page.locator('#view-week').click();
+  await goToView(page, 'week');
   await expect(page.locator('#weekdays .weekday.is-today')).toHaveCount(1);
   await expect(page.locator('#grid .day.is-today')).toHaveCount(1);
 });
@@ -71,7 +71,7 @@ test('keys D, W, M switch views and arrows follow the current view', async ({ pa
 });
 
 test('the chosen view survives a reload', async ({ page }) => {
-  await page.locator('#view-week').click();
+  await goToView(page, 'week');
   await page.reload();
   await page.waitForSelector('#grid .day');
 

@@ -1,7 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Pipeline">
-  <!-- Pink tile, bold white P, bow-red dot with a yellow ring. No thin detail: must read at 16px. -->
-  <rect x="2" y="2" width="60" height="60" rx="16" fill="#ff6fa5"/>
-  <path fill="#ffffff" fill-rule="evenodd"
-        d="M19 15H33A11.5 11.5 0 0 1 33 38H27V49H19Z M27 22.5V30.5H32.5A4 4 0 0 0 32.5 22.5Z"/>
-  <circle cx="50" cy="14" r="6.5" fill="#e60039" stroke="#ffd400" stroke-width="3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="CladFlo">
+  <!-- Bow-red tile with a yellow sun rising over a white horizon: five rays, a
+       bold outer arc and a thin inner one. Thick strokes only: must read at 16px. -->
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/>
+  <path d="M32 23V15M21 26.9L17 20M43 26.9L47 20M13 35L6.1 31M51 35L57.9 31" fill="none" stroke="#ffd400" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M17.2 43.4A15 15 0 0 1 46.8 43.4" fill="none" stroke="#ffd400" stroke-width="6.5" stroke-linecap="round"/>
+  <path d="M23.5 42.9A9 9 0 0 1 38.9 40.2" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M14 53H50" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
 </svg>

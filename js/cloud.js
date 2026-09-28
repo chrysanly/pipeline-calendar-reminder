@@ -1,4 +1,5 @@
-// Firestore storage: one document per reminder at users/{uid}/events/{id}.
+// Firestore storage: one document per record at users/{uid}/{collection}/{id}
+// (reminders in `events`, plus `meetings` and `history`).
 // The SDK (Firebase compat, global `firebase`) and the db are passed in, so the
 // pure parts are unit-tested and the browser specs can swap in a fake.
 
@@ -24,8 +25,14 @@ export function selectBackend({ config, sdk, forceLocal = false }) {
   return 'cloud';
 }
 
-// Key order must not matter when comparing an event with its stored copy.
-const stableJson = evt => JSON.stringify(evt, Object.keys(evt).sort());
+// Key order must not matter when comparing a record with its stored copy, at
+// any depth (minutes hold arrays of objects).
+const canonical = value => {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+};
+const stableJson = record => JSON.stringify(canonical(record));
 
 /**
  * What must be written to turn `prev` into `next`.
@@ -49,21 +56,26 @@ export function planMigration(localEvents, cloudEvents, alreadyMigrated) {
   return localEvents.slice();
 }
 
-export function cloudBackend(db, uid) {
-  const events = db.collection('users').doc(uid).collection('events');
-  const fromDoc = doc => normalizeEvent({ ...doc.data(), id: doc.id });
+/**
+ * Any list of records with ids, one document each at users/{uid}/{name}/{id}.
+ * `normalize` turns a stored document back into a record.
+ */
+export function collectionBackend(db, uid, name, normalize = data => data) {
+  const docs = db.collection('users').doc(uid).collection(name);
+  const fromDoc = doc => normalize({ ...doc.data(), id: doc.id });
 
   return {
     kind: 'cloud',
+    name,
 
     /** Live list: fires now, and again on every change from any device. */
     subscribe(onChange, onError) {
-      return events.onSnapshot(snap => onChange(snap.docs.map(fromDoc)), onError);
+      return docs.onSnapshot(snap => onChange(snap.docs.map(fromDoc)), onError);
     },
 
     /** The server's copy, bypassing the offline cache (used for migration). */
     async fetchServer() {
-      const snap = await events.get({ source: 'server' });
+      const snap = await docs.get({ source: 'server' });
       return snap.docs.map(fromDoc);
     },
 
@@ -71,8 +83,8 @@ export function cloudBackend(db, uid) {
     async write(prev, next) {
       const { upserts, deletes } = diffEvents(prev, next);
       const ops = [
-        ...upserts.map(({ id, ...data }) => batch => batch.set(events.doc(id), data)),
-        ...deletes.map(id => batch => batch.delete(events.doc(id)))
+        ...upserts.map(({ id, ...data }) => batch => batch.set(docs.doc(id), data)),
+        ...deletes.map(id => batch => batch.delete(docs.doc(id)))
       ];
       for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
         const batch = db.batch();
@@ -82,6 +94,11 @@ export function cloudBackend(db, uid) {
       return { upserts: upserts.length, deletes: deletes.length };
     }
   };
+}
+
+/** Reminders at users/{uid}/events/{id}. */
+export function cloudBackend(db, uid) {
+  return collectionBackend(db, uid, 'events', normalizeEvent);
 }
 
 /** Initialise the compat SDK once; returns auth, db and sign-in helpers. */

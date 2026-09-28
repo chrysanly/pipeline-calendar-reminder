@@ -14,7 +14,7 @@
     "prestart": "npm run config",
     "start": "node tests/web/server.mjs 8000",
     "check:firebase": "node scripts/check-firebase.mjs",
-    "deploy": "npm run check:firebase && firebase deploy --only hosting,firestore:rules",
+    "deploy": "npm run check:firebase && npx --yes firebase-tools deploy --only hosting,firestore:rules",
     "icons": "node scripts/make-icons.mjs",
     "screenshots": "node scripts/screenshots.mjs"
   },

@@ -45,3 +45,15 @@ export async function fillForm(page, fields) {
     await form.locator('[name="reminderMinutesBefore"]').selectOption(String(fields.reminderMinutesBefore));
   }
 }
+
+/**
+ * Switch view the way a user would: Day/Week/Month live in the calendar's own
+ * toolbar, so from another page open Calendar in the top nav first.
+ */
+export async function goToView(page, view, action = 'click') {
+  const button = page.locator(`#view-${view}`);
+  if (['day', 'week', 'month'].includes(view) && !(await button.isVisible())) {
+    await page.locator('#view-calendar')[action]();
+  }
+  await button[action]();
+}

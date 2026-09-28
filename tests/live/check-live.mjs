@@ -7,7 +7,8 @@ const out = 'test-results';
 
 const res = await fetch(`${URL}?t=${Date.now()}`);
 const html = await res.text();
-console.log('status', res.status, '| view-dashboard', html.includes('view-dashboard'), '| fa-heart', html.includes('fa-heart'));
+console.log('status', res.status, '| view-dashboard', html.includes('view-dashboard'), '| fa-heart', html.includes('fa-heart'),
+  '| Groq key in page', /gsk_[A-Za-z0-9]{8,}/.test(html));
 
 const browser = await chromium.launch();
 const shots = [
@@ -24,6 +25,12 @@ for (const [name, options] of shots) {
   const shown = await page.evaluate(() => {
     const visible = sel => { const n = document.querySelector(sel); return !!n && !!n.getClientRects().length && getComputedStyle(n).visibility !== 'hidden'; };
     return {
+      title: document.title,
+      brand: document.querySelector('.brand')?.textContent.trim(),
+      signIn: visible('#sign-in') && visible('#prompt-sign-in'),
+      minutes: visible('#view-minutes'),
+      history: visible('#view-history'),
+      settings: visible('#settings-btn'),
       signedOut: visible('#signed-out'),
       dashboard: visible('#dashboard') || visible('.status-card'),
       label: document.querySelector('#month-label')?.textContent.trim(),

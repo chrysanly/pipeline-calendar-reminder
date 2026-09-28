@@ -2,31 +2,61 @@
 
 import {
   getMonthGrid, getWeekDays, formatRangeLabel, formatDayLabel, weekdayNames,
-  toDateKey, eventsSortedByTime
+  toDateKey, eventsSortedByTime, CALENDAR_VIEWS
 } from './calendar.js';
 import { groupByDate, findEvent, STATUSES, STATUS_LABELS } from './storage.js';
 import { COUNTRY_NAMES, locationFromPhone } from './phone-location.js';
-import { buildClients, statusCounts, locationTree, filterClients, UNKNOWN } from './dashboard.js';
 
-const $ = sel => document.querySelector(sel);
+export const $ = sel => document.querySelector(sel);
 
-const STATUS_ICONS = {
+export const STATUS_ICONS = {
   lead: 'fa-seedling',
   potential: 'fa-star',
   active: 'fa-circle-check',
   inactive: 'fa-circle-pause'
 };
-const STATUS_PLURALS = { lead: 'Leads', potential: 'Potential', active: 'Active', inactive: 'Inactive' };
+export const STATUS_PLURALS = { lead: 'Leads', potential: 'Potential', active: 'Active', inactive: 'Inactive' };
 
-/** Show Home or the calendar, and mark the active view button. */
-function showView(view) {
+// Views with their own page; the rest are the calendar.
+const PAGES = { dashboard: '#dashboard', history: '#history', minutes: '#minutes' };
+
+/**
+ * Show one page or the calendar, and mark the active buttons: the main nav
+ * (Calendar stands for day/week/month) and the calendar's own view switch.
+ */
+export function showView(view) {
   document.body.dataset.view = view;
-  $('#dashboard').hidden = view !== 'dashboard';
-  $('.calendar').hidden = view === 'dashboard';
-  for (const button of document.querySelectorAll('.views button')) {
-    const active = button.dataset.view === view;
+  for (const [name, selector] of Object.entries(PAGES)) $(selector).hidden = view !== name;
+  $('.calendar').hidden = view in PAGES;
+  for (const button of document.querySelectorAll('button[data-view]')) {
+    const target = button.dataset.view;
+    const active = target === view || (target === 'calendar' && CALENDAR_VIEWS.includes(view));
     button.classList.toggle('is-active', active);
-    button.setAttribute('aria-pressed', String(active));
+    if (button.closest('.views')) {
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    } else {
+      button.setAttribute('aria-pressed', String(active));
+    }
+  }
+}
+
+/** Spinner on a button while its action runs; it can't be pressed twice. */
+export function setBusy(button, busy) {
+  button.classList.toggle('is-loading', busy);
+  button.disabled = busy;
+  if (busy) button.setAttribute('aria-busy', 'true');
+  else button.removeAttribute('aria-busy');
+}
+
+/** Run `action` with `button` busy, and always free it again. */
+export async function withBusy(button, action) {
+  if (button.classList.contains('is-loading')) return undefined;
+  setBusy(button, true);
+  try {
+    return await action();
+  } finally {
+    setBusy(button, false);
   }
 }
 
@@ -56,21 +86,21 @@ export function swipeDirection(dx, dy) {
   return dx < 0 ? 1 : -1;
 }
 
-function el(tag, className, text) {
+export function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
 }
 
-function icon(name) {
+export function icon(name) {
   const i = el('i', `fa-solid ${name}`);
   i.setAttribute('aria-hidden', 'true');
   return i;
 }
 
 /** Icon followed directly by text, so the element's text is exactly `text`. */
-function withIcon(node, name, text) {
+export function withIcon(node, name, text) {
   node.append(icon(name), text);
   return node;
 }
@@ -203,22 +233,44 @@ function renderAgenda(show, state, byDate, handlers) {
   if (!dayEvents.length) list.appendChild(el('p', 'empty', 'No reminders for this day yet.'));
 }
 
-/** Show the details panel for `state.openId`, or hide it. */
+/**
+ * The side sheet: details of `state.openId`, else every reminder of
+ * `state.openDay` ("+N more"), else hidden.
+ */
 export function renderPanel(state, handlers) {
   const panel = $('#panel');
   const evt = state.openId ? findEvent(state.events, state.openId) : null;
+  const open = Boolean(evt || state.openDay);
   const list = $('#day-events');
   list.innerHTML = '';
+  panel.classList.toggle('is-day-list', !evt && open);
   // On phones and tablets the panel is a sheet over the page: the backdrop
   // closes it and the page behind must not scroll.
-  $('#panel-backdrop').hidden = !evt;
-  document.body.classList.toggle('sheet-open', Boolean(evt));
-  if (!evt) {
-    panel.hidden = true;
-    return;
-  }
-  panel.hidden = false;
+  $('#panel-backdrop').hidden = !open;
+  document.body.classList.toggle('sheet-open', open);
+  panel.hidden = !open;
+  if (!open) return;
+  if (evt) renderDetails(evt, state, list, handlers);
+  else renderDayList(state, list, handlers);
+}
+
+function renderDayList(state, list, handlers) {
+  const dayEvents = eventsSortedByTime(groupByDate(state.events).get(state.openDay) || []);
+  $('#day-label').textContent = `${formatDayLabel(state.openDay)} · ${dayEvents.length} reminder${dayEvents.length === 1 ? '' : 's'}`;
+  const chips = el('div', 'day-list');
+  for (const evt of dayEvents) chips.appendChild(renderChip(evt, handlers));
+  if (!dayEvents.length) chips.appendChild(el('p', 'empty', 'No reminders for this day yet.'));
+  list.appendChild(chips);
+}
+
+function renderDetails(evt, state, list, handlers) {
   $('#day-label').textContent = 'Reminder details';
+  if (state.openDay) {
+    const back = withIcon(el('button', 'link back-to-day'), 'fa-arrow-left', `All reminders on ${formatDayLabel(state.openDay)}`);
+    back.type = 'button';
+    back.addEventListener('click', () => handlers.onBackToDay());
+    list.appendChild(back);
+  }
 
   const item = el('article', 'event');
   item.dataset.id = evt.id;
@@ -260,24 +312,6 @@ export function renderPanel(state, handlers) {
 
   item.appendChild(actions);
   list.appendChild(item);
-}
-
-/**
- * Top-bar sign-in area and the signed-out prompt.
- * status: 'local' | 'loading' | 'signed-out' | 'signed-in'
- */
-export function renderAuth(status, user) {
-  document.body.dataset.auth = status;
-  $('#auth-area').hidden = status === 'local';
-  $('#sign-in').hidden = status !== 'signed-out';
-  $('#sign-out').hidden = status !== 'signed-in';
-  const name = $('#user-name');
-  name.hidden = status !== 'signed-in';
-  name.textContent = user ? (user.displayName || user.email || 'Signed in') : '';
-  // Phones show just a round initial instead of the full name.
-  name.dataset.initial = name.textContent.trim().charAt(0).toUpperCase();
-  name.title = name.textContent;
-  $('#signed-out').hidden = status !== 'signed-out';
 }
 
 export function isPanelOpen() {
@@ -392,171 +426,6 @@ function statusBadge(status) {
   const badge = el('span', `status-badge status-${status}`);
   badge.append(icon(STATUS_ICONS[status]), STATUS_LABELS[status]);
   return badge;
-}
-
-function tag(className, label, count, active, onClick) {
-  const button = el('button', `loc-tag ${className}`);
-  button.type = 'button';
-  button.append(el('span', 'loc-name', label));
-  if (count !== undefined) button.append(el('span', 'loc-count', String(count)));
-  button.classList.toggle('is-active', active);
-  button.setAttribute('aria-pressed', String(active));
-  button.addEventListener('click', onClick);
-  return button;
-}
-
-function formatNext(ref) {
-  if (!ref) return 'No upcoming reminder';
-  return `${formatDayLabel(ref.date)}${ref.time ? `, ${ref.time}` : ''}`;
-}
-
-/**
- * Home: 4 status cards, locations (country → city), and the client list.
- * state.dash holds the filters: {status, country, city, search}.
- */
-export function renderDashboard(state, handlers) {
-  showView('dashboard');
-  const filters = state.dash;
-  const clients = buildClients(state.events);
-  const counts = statusCounts(clients);
-
-  // Status cards: click to filter, click again to clear.
-  const cards = $('#status-cards');
-  cards.innerHTML = '';
-  for (const status of STATUSES) {
-    const active = filters.status === status;
-    const card = el('button', `status-card status-${status}`);
-    card.type = 'button';
-    card.dataset.status = status;
-    card.classList.toggle('is-active', active);
-    card.setAttribute('aria-pressed', String(active));
-    card.setAttribute('aria-label', `${counts[status]} ${STATUS_PLURALS[status]}`);
-    const iconBox = el('span', 'status-icon');
-    iconBox.appendChild(icon(STATUS_ICONS[status]));
-    card.append(iconBox, el('span', 'status-count', String(counts[status])), el('span', 'status-label', STATUS_PLURALS[status]));
-    card.addEventListener('click', () => handlers.onDashFilter({ status: active ? null : status }));
-    cards.appendChild(card);
-  }
-
-  // Locations for the clients the status/search filters leave.
-  const scoped = filterClients(clients, { status: filters.status, search: filters.search });
-  const locations = $('#location-list');
-  locations.innerHTML = '';
-  const tree = locationTree(scoped);
-  if (!tree.length) locations.appendChild(el('p', 'empty', 'No locations yet.'));
-  for (const country of tree) {
-    const group = el('div', 'loc-group');
-    const countryActive = filters.country === country.name && !filters.city;
-    const countryTag = tag('loc-country', country.name, country.count, countryActive,
-      () => handlers.onDashFilter(countryActive ? { country: null, city: null } : { country: country.name, city: null }));
-    countryTag.dataset.country = country.name;
-    countryTag.prepend(icon(country.name === UNKNOWN ? 'fa-circle-question' : 'fa-earth-asia'));
-    group.appendChild(countryTag);
-
-    const cities = country.cities.filter(c => !(country.cities.length === 1 && c.name === UNKNOWN));
-    if (cities.length) {
-      const cityList = el('div', 'loc-cities');
-      for (const city of cities) {
-        const cityActive = filters.country === country.name && filters.city === city.name;
-        const cityTag = tag('loc-city', city.name, city.count, cityActive,
-          () => handlers.onDashFilter(cityActive ? { city: null } : { country: country.name, city: city.name }));
-        cityTag.dataset.country = country.name;
-        cityTag.dataset.city = city.name;
-        cityTag.prepend(icon('fa-city'));
-        cityList.appendChild(cityTag);
-      }
-      group.appendChild(cityList);
-    }
-    locations.appendChild(group);
-  }
-
-  // Active filters as removable tags.
-  const active = $('#active-filters');
-  active.innerHTML = '';
-  const removable = [];
-  if (filters.status) removable.push([`Status: ${STATUS_LABELS[filters.status]}`, { status: null }]);
-  if (filters.country) removable.push([filters.country, { country: null, city: null }]);
-  if (filters.city) removable.push([filters.city, { city: null }]);
-  for (const [label, patch] of removable) {
-    const button = el('button', 'filter-tag');
-    button.type = 'button';
-    button.setAttribute('aria-label', `Remove filter ${label}`);
-    button.append(el('span', '', label), icon('fa-xmark'));
-    button.addEventListener('click', () => handlers.onDashFilter(patch));
-    active.appendChild(button);
-  }
-  active.hidden = !removable.length;
-
-  // Clients.
-  const shown = filterClients(clients, filters);
-  $('#client-count').textContent = shown.length === clients.length
-    ? `(${clients.length})` : `(${shown.length} of ${clients.length})`;
-  const list = $('#client-list');
-  list.innerHTML = '';
-  if (!clients.length) {
-    list.appendChild(el('p', 'empty dash-empty', state.loading
-      ? 'Loading your clients…'
-      : 'No clients yet: add a reminder or import Excel'));
-    return;
-  }
-  if (!shown.length) {
-    list.appendChild(el('p', 'empty dash-empty', 'No clients match these filters.'));
-    return;
-  }
-
-  const head = el('div', 'client-row client-head');
-  for (const label of ['Client', 'Status', 'City, country', 'Phone', 'Reminders', 'Next reminder']) {
-    head.appendChild(el('span', '', label));
-  }
-  list.appendChild(head);
-
-  for (const client of shown) {
-    const row = el('div', `client-row status-${client.status}`);
-    row.dataset.client = client.name;
-
-    const name = el('button', 'client-name', client.name);
-    name.type = 'button';
-    name.title = 'Open this client\'s next reminder';
-    name.addEventListener('click', () => handlers.onOpenClient(client));
-
-    const select = el('select', `client-status status-${client.status}`);
-    select.setAttribute('aria-label', `Status of ${client.name}`);
-    for (const status of STATUSES) {
-      const option = el('option', '', STATUS_LABELS[status]);
-      option.value = status;
-      select.appendChild(option);
-    }
-    select.value = client.status;
-    if (!client.key) {
-      select.disabled = true;
-      select.title = 'Add a client name to these reminders to set a status';
-    }
-    select.addEventListener('change', () => handlers.onClientStatus(client.name, select.value));
-
-    const placeText = [client.city, client.country].filter(Boolean).join(', ') || '—';
-    const where = withIcon(el('span', 'client-place'), 'fa-location-dot', placeText);
-    if (client.location) where.title = client.location;
-
-    const phone = el('span', 'client-phone');
-    if (client.phone) {
-      const link = el('a', '', client.phone);
-      link.href = `tel:${client.phone.replace(/[^\d+]/g, '')}`;
-      phone.append(icon('fa-phone'), link);
-    } else {
-      phone.append(icon('fa-phone'), '—');
-    }
-
-    const reminders = withIcon(el('span', 'client-reminders'), 'fa-bell', String(client.reminderCount));
-    reminders.title = `${client.reminderCount} reminder(s)`;
-    const next = withIcon(el('span', 'client-next'), 'fa-clock', formatNext(client.nextReminder));
-
-    row.append(name, select, where, phone, reminders, next);
-    list.appendChild(row);
-  }
-}
-
-export function bindDashboard(handlers) {
-  $('#client-search').addEventListener('input', e => handlers.onDashFilter({ search: e.target.value }));
 }
 
 let bannerTimer = null;

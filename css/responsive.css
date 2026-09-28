@@ -1,0 +1,200 @@
+/* Screen sizes for the top bar, calendar, details panel and modals.
+   Breakpoints: 1100px (small laptop), 900px (tablet), 640px (phone). */
+
+/* ---------- small laptop (≤1100px) ---------- */
+
+@media (max-width: 1100px) {
+  .layout { gap: var(--sp-4); padding-left: calc(var(--sp-5) + env(safe-area-inset-left)); padding-right: calc(var(--sp-5) + env(safe-area-inset-right)); }
+  .panel { flex-basis: 300px; }
+}
+
+/* ---------- tablet and phone (≤900px) ---------- */
+
+@media (max-width: 900px) {
+  /* Every control is a comfortable touch target. */
+  .topbar button { min-height: var(--tap); min-width: var(--tap); }
+
+  /* Horizontal moves are ours (swipe = prev/next); vertical scroll stays native. */
+  .calendar { touch-action: pan-y; }
+
+  /* Details panel: a sheet over the page, 360px from the right on tablets. */
+  .panel-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 24;
+    background: var(--backdrop);
+    animation: fade-in .18s ease-out;
+  }
+
+  .panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    width: min(380px, 100vw);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: calc(var(--sp-4) + env(safe-area-inset-top)) calc(var(--sp-4) + env(safe-area-inset-right)) calc(var(--sp-4) + env(safe-area-inset-bottom)) var(--sp-4);
+    border-width: 0 0 0 var(--stroke);
+    border-color: var(--outline);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    animation: sheet-in-right .24s var(--ease);
+  }
+
+  body.sheet-open { overflow: hidden; }
+
+  .event-actions { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+  .event-actions .link {
+    justify-content: center;
+    min-height: var(--tap);
+    font-size: var(--fs-md);
+    text-decoration: none;
+    background: var(--surface);
+    border: var(--stroke) solid var(--border);
+    border-radius: var(--radius-pill);
+  }
+  .event-actions .link.danger { border-color: var(--danger); }
+}
+
+/* ---------- tablet (641–900px) ---------- */
+
+@media (min-width: 641px) and (max-width: 900px) {
+  .layout { padding: var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-right)) var(--sp-8) calc(var(--sp-4) + env(safe-area-inset-left)); }
+}
+
+/* ---------- phone (≤640px) ---------- */
+
+@media (max-width: 640px) {
+  /* New reminder: a floating round button, bottom right. */
+  #add-event {
+    position: fixed;
+    right: calc(var(--sp-4) + env(safe-area-inset-right));
+    bottom: calc(var(--sp-4) + env(safe-area-inset-bottom));
+    z-index: 18;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    font-size: var(--fs-xl);
+    border-radius: 50%;
+    box-shadow: var(--shadow-press), 0 10px 24px rgba(230, 0, 57, .35);
+  }
+
+  /* Room at the bottom so the floating button never covers a reminder. */
+  .layout { gap: 0; padding: var(--sp-2) calc(var(--sp-2) + env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) calc(var(--sp-2) + env(safe-area-inset-left)); }
+  .calendar { padding: 6px; border-radius: var(--radius); }
+
+  /* Month: compact 7 columns, day number + up to 2 one-line titles. Taps land
+     on the day (which fills the agenda below), not on the tiny titles. */
+  .weekdays:not(.view-month) { display: none; }
+  .weekdays, .grid { gap: 3px; }
+  .weekday { padding-bottom: 4px; font-size: 11px; }
+  .grid.view-month .day { min-height: 64px; padding: 3px 2px; border-width: 1.5px; border-radius: var(--radius-sm); }
+  .grid.view-month .day-number { min-width: 22px; height: 22px; font-size: var(--fs-xs); }
+  .grid.view-month .chips { gap: 2px; margin-top: 2px; pointer-events: none; }
+  .grid.view-month .chip { display: block; padding: 1px 3px; font-size: 10.5px; line-height: 1.3; border-left-width: 2px; border-radius: 4px; box-shadow: none; }
+  .grid.view-month .chip-time, .grid.view-month .chip-client { display: none; }
+  .grid.view-month .chip-title { display: block; width: 100%; font-size: inherit; }
+  .grid.view-month .more { padding: 0 3px; font-size: 10.5px; }
+
+  /* Week and day: a vertical list, the date on the left, reminders on the right. */
+  .grid.view-week, .grid.view-day { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .grid.view-week .day, .grid.view-day .day {
+    display: grid;
+    grid-template-columns: var(--tap) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    column-gap: 10px;
+    align-items: start;
+    height: auto;
+    min-height: 60px;
+    max-height: 60dvh;
+    padding: var(--sp-2);
+  }
+  .grid:not(.view-month) .day-name {
+    display: block;
+    grid-column: 1;
+    font-size: 11px;
+    font-weight: var(--fw-bold);
+    text-align: center;
+    color: var(--muted);
+  }
+  .grid:not(.view-month) .day-number { display: inline-flex; grid-column: 1; justify-self: center; }
+  .grid:not(.view-month) .chips { grid-column: 2; grid-row: 1 / span 2; max-height: calc(60dvh - 2 * var(--sp-2)); margin-top: 0; }
+  .grid:not(.view-month) .chip-title { padding: 4px 0; }
+
+  /* Details panel and modals: bottom sheets with a grab handle. */
+  .panel {
+    top: auto;
+    left: 0;
+    width: auto;
+    max-height: 85vh;
+    max-height: 85dvh;
+    padding: 6px calc(var(--sp-4) + env(safe-area-inset-right)) calc(var(--sp-4) + env(safe-area-inset-bottom)) calc(var(--sp-4) + env(safe-area-inset-left));
+    border-width: var(--stroke) 0 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation-name: sheet-up;
+  }
+  .panel::before, .modal-card::before {
+    content: '';
+    display: block;
+    flex: none;
+    width: 40px;
+    height: 5px;
+    margin: 4px auto var(--sp-2);
+    background: var(--border);
+    border-radius: 3px;
+  }
+  .event-actions { grid-template-columns: 1fr; }
+
+  .modal { place-items: end stretch; padding: 0; }
+  .modal-card {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-height: calc(100vh - env(safe-area-inset-top));
+    max-height: calc(100dvh - env(safe-area-inset-top));
+    padding: 6px calc(var(--sp-4) + env(safe-area-inset-right)) calc(var(--sp-4) + env(safe-area-inset-bottom)) calc(var(--sp-4) + env(safe-area-inset-left));
+    border-width: var(--stroke) 0 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: var(--shadow-lg);
+    animation: sheet-up .26s var(--ease);
+  }
+
+  /* The reminder form is long: its sheet fills the screen, with Cancel/Save
+     pinned at the bottom even when the fields are short. */
+  #modal .modal-card { height: 100vh; height: 100dvh; max-height: none; padding-top: calc(6px + env(safe-area-inset-top)); padding-bottom: 0; border-radius: 0; border-width: 0; }
+  #modal .modal-card::before { display: none; }
+  #event-form { flex: 1 0 auto; display: flex; flex-direction: column; }
+  .row { grid-template-columns: 1fr; }
+  .modal-actions {
+    position: sticky;
+    bottom: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: auto calc(-1 * var(--sp-4) - env(safe-area-inset-right)) 0 calc(-1 * var(--sp-4) - env(safe-area-inset-left));
+    padding: var(--sp-3) calc(var(--sp-4) + env(safe-area-inset-right)) calc(var(--sp-3) + env(safe-area-inset-bottom)) calc(var(--sp-4) + env(safe-area-inset-left));
+    background: var(--surface);
+    border-top: var(--stroke) solid var(--border);
+  }
+  .modal-actions button { min-height: 48px; }
+
+  /* Reminder toast: full width at the top, under the notch. */
+  .banner { left: var(--sp-2); right: var(--sp-2); width: auto; transform: none; animation-name: toast-drop; }
+
+  .signed-out { margin: var(--sp-6) var(--sp-3); padding: var(--sp-6) var(--sp-4); }
+  #prompt-sign-in { width: 100%; min-height: 48px; }
+
+  /* Sits inside the layout's bottom padding (kept for the + button) instead of
+     below it; the centred text stays left of the button at 360–430px. */
+  .site-footer { margin-top: -60px; padding: 0 var(--sp-4) calc(var(--sp-6) + env(safe-area-inset-bottom)); }
+  .site-footer a { display: inline-flex; align-items: center; min-height: var(--tap); }
+}
+
+@keyframes toast-drop { from { opacity: 0; transform: translateY(-12px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel, .panel-backdrop, .modal-card, .banner { animation: none; }
+}

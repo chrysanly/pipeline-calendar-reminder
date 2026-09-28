@@ -5,7 +5,7 @@
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STORAGE_KEY, fillForm, todayKey } from './helpers.mjs';
+import { STORAGE_KEY, fillForm, todayKey, goToView } from './helpers.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TODAY = todayKey();
@@ -59,8 +59,16 @@ async function signIn(page) {
   await expect(page.locator('#user-name')).toHaveText('Test User');
 }
 
+/** Sign out lives in the account dropdown on the right of the top bar. */
+async function signOut(page) {
+  await page.locator('#account-btn').click();
+  await page.locator('#sign-out').click();
+}
+
 const todayCell = page => page.locator(`#grid .day[data-key="${TODAY}"]`);
-const dump = page => page.evaluate(() => window.__fake.dump());
+// Reminder docs only; the History log (users/{uid}/history) is checked on its own below.
+const dump = page => page.evaluate(() =>
+  Object.fromEntries(Object.entries(window.__fake.dump()).filter(([path]) => path.includes('/events/'))));
 
 async function createEvent(page, fields) {
   await page.locator('#add-event').click();
@@ -68,6 +76,38 @@ async function createEvent(page, fields) {
   await page.locator('#event-form button[type="submit"]').click();
   await expect(page.locator('#modal')).toBeHidden();
 }
+
+test('the account dropdown shows the name and Sign out; Escape and a click outside close it', async ({ page }) => {
+  await openCloud(page);
+  await signIn(page);
+  const button = page.locator('#account-btn');
+  const menu = page.locator('#account-menu');
+  await expect(button.locator('.avatar')).toHaveText('T');
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+
+  // Top right of the bar.
+  const box = await button.boundingBox();
+  expect(box.x + box.width).toBeGreaterThan(page.viewportSize().width - 40);
+
+  await button.click();
+  await expect(menu).toBeVisible();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#account-name')).toHaveText('Test User');
+  await expect(page.locator('#account-email')).toHaveText('test@example.com');
+  await expect(page.locator('#sign-out')).toBeFocused();
+  await expect(page.locator('#sign-out .fa-right-from-bracket')).toHaveCount(1);
+  await page.screenshot({ path: join(here, '..', '..', 'test-results', 'design', 'account-menu.png') });
+
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await button.click();
+  await page.locator('.brand').click();
+  await expect(menu).toBeHidden();
+
+  await signOut(page);
+  await expect(page.locator('#signed-out')).toBeVisible();
+  await expect(page.locator('#account')).toBeHidden();
+});
 
 test('signed out: the sign-in prompt shows and the calendar is hidden', async ({ page }) => {
   await openCloud(page);
@@ -100,8 +140,9 @@ test('after sign-in, reminders come from the snapshot (own uid only)', async ({ 
   await signIn(page);
 
   await expect(page.locator('#signed-out')).toBeHidden();
-  await expect(page.locator('#sign-out')).toBeVisible();
-  await expect(page.locator('#sign-out .fa-right-from-bracket')).toHaveCount(1);
+  await expect(page.locator('#sign-in')).toBeHidden();
+  await expect(page.locator('#sign-out')).toBeHidden(); // inside the closed account menu
+  await expect(page.locator('#account-btn')).toBeVisible();
   await expect(todayCell(page).locator('.chip-title')).toHaveText(['From the cloud']);
   await expect(page.locator('#grid .chip-title', { hasText: 'Not mine' })).toHaveCount(0);
 });
@@ -134,7 +175,7 @@ test('create, edit and delete write the right Firestore docs', async ({ page }) 
   await expect(todayCell(page).locator('.chip')).toHaveCount(0);
   expect(await dump(page)).toEqual({});
 
-  const writes = await page.evaluate(() => window.__fake.appWrites().map(w => [w.op, w.path]));
+  const writes = await page.evaluate(() => window.__fake.appWrites().filter(w => w.path.includes('/events/')).map(w => [w.op, w.path]));
   expect(writes).toEqual([['set', docPath(id)], ['set', docPath(id)], ['delete', docPath(id)]]);
 });
 
@@ -185,7 +226,7 @@ test('local reminders move to an empty cloud once, on first sign-in', async ({ p
   // Empty the cloud, sign out and back in: it must not upload again.
   await page.locator('#banner-close').click();
   await page.evaluate(paths => paths.forEach(p => window.__fake.remoteDelete(p)), [docPath('l1'), docPath('l2')]);
-  await page.locator('#sign-out').click();
+  await signOut(page);
   await expect(page.locator('#signed-out')).toBeVisible();
   await signIn(page);
   await expect(todayCell(page).locator('.chip')).toHaveCount(0);
@@ -225,7 +266,7 @@ test('signing out clears the calendar and shows the prompt again', async ({ page
   await signIn(page);
   await expect(todayCell(page).locator('.chip')).toHaveCount(1);
 
-  await page.locator('#sign-out').click();
+  await signOut(page);
   await expect(page.locator('#signed-out')).toBeVisible();
   await expect(page.locator('#grid .chip')).toHaveCount(0);
   await expect(page.locator('#user-name')).toBeHidden();
@@ -264,7 +305,7 @@ test('auth that never answers: the page is not blank and the label is not stuck 
   await page.addInitScript(() => { window.__fakeHold = { auth: true }; });
   await openCloud(page);
   await expect(page.locator('.topbar')).toBeVisible();
-  await expect(page.locator('.brand')).toHaveText('Pipeline');
+  await expect(page.locator('.brand')).toHaveText('CladFlo');
   await expect(page.locator('#month-label')).not.toHaveText(/^\s*—?\s*$/);
   expect(errors).toEqual([]);
 });
@@ -273,7 +314,7 @@ test('signed in but the first snapshot never arrives: the calendar still renders
   await page.addInitScript(() => { window.__fakeHold = { snapshot: true }; });
   await openCloud(page);
   await signIn(page);
-  await page.locator('#view-month').click();
+  await goToView(page, 'month');
   await expect(page.locator('.calendar')).toBeVisible();
   await expect(page.locator('#grid .day')).toHaveCount(42);
   await expect(page.locator('#month-label')).not.toHaveText(/^\s*—?\s*$/);
@@ -286,4 +327,32 @@ test('config set but the SDK failed to load: local mode with a "Working offline"
   await expect(page.locator('#auth-area')).toBeHidden();
   await expect(page.locator('.calendar')).toBeVisible();
   await expect(page.locator('#banner-title')).toHaveText('Working offline');
+});
+
+test('History and minutes are saved in the account at users/{uid}/history and users/{uid}/meetings', async ({ page }) => {
+  await openCloud(page, {
+    cloud: { [`users/${UID}/meetings/m0`]: { clientName: 'Acme Ltd.', title: 'Earlier meeting', date: '2026-09-01' } }
+  });
+  await signIn(page);
+  await createEvent(page, { title: 'Follow-up call', clientName: 'Acme Ltd.', date: TODAY, time: '14:30' });
+
+  const all = await page.evaluate(() => window.__fake.dump());
+  const history = Object.entries(all).filter(([path]) => path.startsWith(`users/${UID}/history/`));
+  expect(history).toHaveLength(1);
+  expect(history[0][1]).toMatchObject({ action: 'create', kind: 'reminder', title: 'Follow-up call', client: 'Acme Ltd.' });
+  expect('id' in history[0][1]).toBe(false);
+
+  // The saved meeting comes from this account's meetings collection.
+  await page.keyboard.press('n');
+  await expect(page.locator('.saved-title')).toHaveText(['Earlier meeting']);
+  page.once('dialog', d => d.accept());
+  await page.locator('.saved-delete').click();
+  await expect(page.locator('.saved-item')).toHaveCount(0);
+  expect(Object.keys(await page.evaluate(() => window.__fake.dump())).filter(p => p.includes('/meetings/'))).toEqual([]);
+
+  // Signing out empties both lists on screen.
+  await signOut(page);
+  await expect(page.locator('#signed-out')).toBeVisible();
+  expect(await page.locator('#saved-minutes .saved-item').count()).toBe(0);
+  expect(await page.locator('#history-list .history-item').count()).toBe(0);
 });

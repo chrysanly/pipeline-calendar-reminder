@@ -27,7 +27,8 @@ async function importFile(page, name) {
 
 const cell = (page, key) => page.locator(`#grid .day[data-key="${key}"]`);
 
-test('the Import Excel button opens the file picker', async ({ page }) => {
+test('the Import Excel button on Home opens the file picker', async ({ page }) => {
+  await page.locator('#view-dashboard').click();
   const chooser = page.waitForEvent('filechooser');
   await page.locator('#import-btn').click();
   expect((await chooser).isMultiple()).toBe(false);
@@ -37,7 +38,7 @@ test('sample.xlsx: chips land on the dates from the BD Notes', async ({ page }) 
   await importFile(page, 'sample.xlsx');
 
   await expect(page.locator('#banner-title')).toHaveText(
-    'Imported 4 reminders (1 without a date → Sun, 27 September 2026, 1 skipped)');
+    'Imported 4 reminders: 4 new, 0 duplicates (1 without a date → Sun, 27 September 2026, 1 skipped)');
   // Jumped to the first imported date's month.
   await expect(page.locator('#month-label')).toHaveText('October 2026');
 
@@ -84,6 +85,7 @@ test('importing the same file again adds no duplicates', async ({ page }) => {
 
   await page.locator('#banner-close').click();
   await importFile(page, 'sample.xlsx');
+  await expect(page.locator('#banner-title')).toContainText('Imported 4 reminders: 0 new, 4 duplicates');
   expect(await count()).toBe(4);
   await expect(cell(page, '2026-10-05').locator('.chip')).toHaveCount(1);
 });
@@ -96,7 +98,7 @@ test('the user\'s test-data-pipeline.xlsx imports without errors', async ({ page
   await importFile(page, 'test-data-pipeline.xlsx');
 
   await expect(page.locator('#banner-title')).toHaveText(
-    'Imported 1 reminder (0 without a date → Sun, 27 September 2026, 0 skipped)');
+    'Imported 1 reminder: 1 new, 0 duplicates (0 without a date → Sun, 27 September 2026, 0 skipped)');
   const chip = cell(page, '2026-09-26').locator('.chip');
   await expect(chip.locator('.chip-title')).toHaveText('Follow up: Acme Lt.');
   await expect(chip.locator('.chip-time')).toHaveText('10:00');

@@ -36,7 +36,7 @@ test('the palette variables change with the theme', async ({ page }) => {
 
   expect(await bg()).toBe('rgb(255, 245, 248)'); // #fff5f8
   await page.locator('#theme-toggle').click();
-  expect(await bg()).toBe('rgb(31, 20, 32)'); // #1f1420
+  expect(await bg()).toBe('rgb(26, 16, 22)'); // #1a1016
 });
 
 test('the page uses Font Awesome icons', async ({ page }) => {

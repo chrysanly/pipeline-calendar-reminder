@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 248 64" width="248" height="64" role="img" aria-label="CladFlo">
+  <!-- The logo.svg mark plus the name, for documents and headers. -->
+  <rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/>
+  <path d="M32 23V15M21 26.9L17 20M43 26.9L47 20M13 35L6.1 31M51 35L57.9 31" fill="none" stroke="#ffd400" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M17.2 43.4A15 15 0 0 1 46.8 43.4" fill="none" stroke="#ffd400" stroke-width="6.5" stroke-linecap="round"/>
+  <path d="M23.5 42.9A9 9 0 0 1 38.9 40.2" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M14 53H50" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <text x="76" y="44" font-family="ui-rounded, 'SF Pro Rounded', Nunito, 'Segoe UI', system-ui, sans-serif" font-size="34" font-weight="800" letter-spacing="-0.5" fill="#2b1b22">CladFlo</text>
+</svg>

@@ -320,9 +320,14 @@ export function importWorkbook(XLSX, data, options) {
   throw new Error('No "Company" column found in the file.');
 }
 
-/** "Imported 3 reminders (1 without a date → Sun, 27 September 2026, 1 skipped)" */
-export function importSummary({ events, skipped }, selectedLabel) {
+/**
+ * "Imported 3 reminders: 2 new, 1 duplicate (1 without a date → Sun, 27 September 2026, 1 skipped)".
+ * `merged` is what mergeImported returned: a duplicate is a row whose reminder
+ * already existed (or came earlier in the same file) and was updated, not added.
+ */
+export function importSummary({ events, skipped }, selectedLabel, { added, updated }) {
   const n = events.length;
   const undated = events.filter(e => !e.dateFound).length;
-  return `Imported ${n} reminder${n === 1 ? '' : 's'} (${undated} without a date → ${selectedLabel}, ${skipped} skipped)`;
+  return `Imported ${n} reminder${n === 1 ? '' : 's'}: ${added} new, ${updated} duplicate${updated === 1 ? '' : 's'}`
+    + ` (${undated} without a date → ${selectedLabel}, ${skipped} skipped)`;
 }

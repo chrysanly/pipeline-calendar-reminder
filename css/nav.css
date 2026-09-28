@@ -1,0 +1,287 @@
+/* Top bar (brand, main nav, account), the calendar toolbar and page headers.
+   Desktop first; 1100px (small laptop), 900px (tablet) and 640px (phone) below. */
+
+/* ---------- top bar: brand · Home Calendar Minutes History · theme settings account ---------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-6);
+  min-height: 68px;
+  padding: var(--sp-3) calc(var(--sp-6) + env(safe-area-inset-right)) var(--sp-3) calc(var(--sp-6) + env(safe-area-inset-left));
+  border-bottom: var(--stroke) solid var(--border);
+}
+
+/* The frosted glass sits on a layer behind the bar: backdrop-filter on the bar
+   itself would make it the containing block of fixed children. */
+.topbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  backdrop-filter: saturate(1.4) blur(12px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
+  letter-spacing: -.02em;
+  white-space: nowrap;
+}
+/* Same artwork as the favicon. */
+.brand-logo { width: 34px; height: 34px; flex: none; display: block; }
+
+/* Main nav: four pages, icon + label. */
+.views { justify-self: start; }
+.views button { padding: 0 var(--sp-4); }
+
+.topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
+
+/* ---------- "Saving… / Saved" ---------- */
+
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sync-status[hidden] { display: none; }
+.sync-status::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.sync-status.is-saving::before {
+  border: 2px solid var(--accent);
+  border-right-color: transparent;
+  animation: btn-spin .7s linear infinite;
+}
+.sync-status.is-saved::before { background: var(--st-active); box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-active) 22%, transparent); }
+.sync-status.is-failed { color: var(--danger); }
+.sync-status.is-failed::before { background: var(--danger); }
+
+/* ---------- account dropdown ---------- */
+
+.auth-area { display: flex; align-items: center; gap: var(--sp-2); }
+.auth-area[hidden] { display: none; }
+
+.account { position: relative; }
+.account[hidden] { display: none; }
+
+.account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: 4px var(--sp-3) 4px 4px;
+  font: inherit;
+  font-weight: var(--fw-bold);
+  color: var(--text);
+  background: var(--surface);
+  border: var(--stroke) solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+}
+.account-btn[aria-expanded="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.account-btn:focus-visible { outline: none; box-shadow: var(--ring); }
+.account-caret { font-size: 12px; color: var(--muted); transition: transform var(--dur) var(--ease); }
+.account-btn[aria-expanded="true"] .account-caret { transform: rotate(180deg); }
+
+@media (hover: hover) {
+  .account-btn:hover { border-color: var(--accent); }
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-black);
+  color: var(--on-primary);
+  background: var(--primary);
+  border-radius: 50%;
+}
+.avatar-lg { width: 44px; height: 44px; font-size: var(--fs-lg); }
+
+.user-name {
+  max-width: 16ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-sm);
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + var(--sp-2));
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: var(--sp-3);
+  width: 280px;
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: var(--stroke) solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  transform-origin: top right;
+  animation: menu-in .16s var(--ease);
+}
+.account-menu[hidden] { display: none; }
+.account-info { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.account-text { display: grid; min-width: 0; }
+.account-name, .account-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-email { font-size: var(--fs-sm); color: var(--muted); }
+.account-signout { width: 100%; }
+
+@keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+
+/* ---------- calendar toolbar: ◀ ▶ Today  label · Day Week Month · + New reminder ---------- */
+
+.cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-4);
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-1) var(--sp-1) var(--sp-3);
+  border-bottom: var(--stroke) solid var(--border);
+}
+.nav { display: flex; align-items: center; gap: var(--sp-2); flex: 1 1 auto; min-width: 0; }
+.month-label {
+  min-width: 0;
+  margin: 0 0 0 var(--sp-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
+  letter-spacing: -.01em;
+  white-space: nowrap;
+}
+
+/* Day / Week / Month: the same segmented control as the main nav, smaller. */
+.cal-views {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: var(--stroke) solid var(--border);
+  border-radius: var(--radius-pill);
+}
+.cal-views button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.cal-views button.is-active {
+  color: var(--on-primary);
+  background: var(--primary);
+  font-weight: var(--fw-bold);
+  box-shadow: var(--shadow-press-sm);
+}
+.cal-views button:focus-visible { outline: none; box-shadow: var(--ring); }
+@media (hover: hover) {
+  .cal-views button:not(.is-active):hover { color: var(--text); background: var(--accent-soft); }
+}
+
+/* ---------- page header (Home: title + Import Excel) ---------- */
+
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3) var(--sp-4); }
+.page-title { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-black); letter-spacing: -.02em; }
+.page-sub { margin: 2px 0 0; color: var(--muted); }
+
+/* Nothing to add or import until Firebase says who you are. */
+body[data-auth="signed-out"] :is(#add-event, #import-btn),
+body[data-auth="loading"] :is(#add-event, #import-btn) { display: none; }
+
+/* Switching pages: a quick fade. Opacity only, so no containing block for the fixed + button. */
+:is(.dashboard, .page, .calendar):not([hidden]) { animation: page-in .2s var(--ease); }
+@keyframes page-in { from { opacity: 0; } }
+
+/* ---------- small laptop (≤1100px) ---------- */
+
+@media (max-width: 1100px) {
+  .topbar { gap: var(--sp-4); padding-left: calc(var(--sp-5) + env(safe-area-inset-left)); padding-right: calc(var(--sp-5) + env(safe-area-inset-right)); }
+  .views button { padding: 0 var(--sp-3); }
+  .user-name { max-width: 10ch; }
+}
+
+/* ---------- tablet (≤900px): nav icons only, label on hover/title ---------- */
+
+@media (max-width: 900px) {
+  .topbar { gap: var(--sp-3); }
+  .views .btn-label, .cal-views .btn-label { display: none; }
+  .views button, .cal-views button { min-width: var(--tap); padding: 0 var(--sp-3); }
+  .sync-status { font-size: 0; margin-right: 0; } /* just the dot */
+  .user-name { display: none; }
+}
+
+/* ---------- phone (≤640px): brand + actions / the four pages ---------- */
+
+@media (max-width: 640px) {
+  .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--sp-2);
+    min-height: 0;
+    padding: calc(var(--sp-2) + env(safe-area-inset-top)) calc(var(--sp-3) + env(safe-area-inset-right)) var(--sp-2) calc(var(--sp-3) + env(safe-area-inset-left));
+  }
+  .brand { min-width: 0; gap: var(--sp-2); overflow: hidden; font-size: var(--fs-lg); }
+  .brand-logo { width: 28px; height: 28px; }
+  .topbar-actions { gap: 6px; }
+  #sign-in .btn-label { display: none; }
+  #sign-in { width: var(--tap); padding: 0; }
+  .account-btn { padding-right: var(--sp-2); }
+  .account-menu { position: fixed; top: calc(60px + env(safe-area-inset-top)); left: var(--sp-3); right: var(--sp-3); width: auto; }
+
+  /* The four pages: a full-width row, a small label under each icon. */
+  .views { grid-row: 2; grid-column: 1 / -1; justify-self: stretch; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-radius: var(--radius-lg); }
+  .views .btn-label { display: block; font-size: 11px; line-height: 1.2; }
+  .views button { flex-direction: column; gap: 2px; min-width: 0; padding: 4px 2px; border-radius: var(--radius); }
+
+  /* Calendar toolbar: ◀ ▶ label Today / Day Week Month. New reminder floats. */
+  .cal-toolbar { gap: var(--sp-2); margin-bottom: 6px; padding: 0 0 6px; }
+  .nav { display: grid; grid-template-columns: var(--tap) var(--tap) minmax(0, 1fr) auto; gap: 6px; flex-basis: 100%; }
+  .month-label { grid-column: 3; grid-row: 1; margin: 0; font-size: var(--fs-base); text-align: center; }
+  #today { grid-column: 4; grid-row: 1; }
+  .cal-views { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex-basis: 100%; }
+  .cal-views .btn-label { display: inline; }
+  #add-event .btn-label { display: none; }
+
+  .page-title { font-size: var(--fs-xl); }
+  .page-sub { display: none; }
+  #import-btn .btn-label { display: none; }
+  #import-btn { width: var(--tap); padding: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.dashboard, .page, .calendar):not([hidden]), .account-menu { animation: none; }
+}

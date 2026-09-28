@@ -3,7 +3,7 @@
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STORAGE_KEY, fillForm } from './helpers.mjs';
+import { STORAGE_KEY, fillForm, goToView } from './helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const NOW = new Date(2026, 8, 27, 10, 0, 0);
@@ -42,7 +42,15 @@ const count = (page, status) => page.locator(`.status-card[data-status="${status
 const clientNames = page => page.locator('.client-row:not(.client-head) .client-name');
 const stored = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
 
+/** New reminder is on the calendar page: open Calendar, then the form. */
+async function openNewReminder(page) {
+  await page.locator('#view-calendar').click();
+  await page.locator('#add-event').click();
+}
+
+/** The Home status cards (going back to Home first if needed). */
 async function expectCounts(page, { lead, potential, active, inactive }) {
+  if (!(await page.locator('#dashboard').isVisible())) await page.locator('#view-dashboard').click();
   await expect(count(page, 'lead')).toHaveText(String(lead));
   await expect(count(page, 'potential')).toHaveText(String(potential));
   await expect(count(page, 'active')).toHaveText(String(active));
@@ -70,7 +78,7 @@ test('H and the Home button switch to the dashboard, and it is remembered', asyn
   await expect(page.locator('#grid .day')).toHaveCount(42);
   await page.keyboard.press('h');
   await expect(page.locator('#dashboard')).toBeVisible();
-  await page.locator('#view-week').click();
+  await goToView(page, 'week');
   await expect(page.locator('#dashboard')).toBeHidden();
   await page.locator('#view-dashboard').click();
   await page.reload();
@@ -183,7 +191,7 @@ test('clicking a client opens the details panel for its next reminder', async ({
 
 test('the counts follow adding and editing reminders in the form', async ({ page }) => {
   await openHome(page, { events: [] });
-  await page.locator('#add-event').click();
+  await openNewReminder(page);
   await fillForm(page, { title: 'Discovery call', clientName: 'New Co', time: '15:00' });
   await page.locator('#event-form [name="status"]').selectOption('potential');
   await page.locator('#event-form button[type="submit"]').click();
@@ -200,7 +208,7 @@ test('the counts follow adding and editing reminders in the form', async ({ page
 
 test('a new reminder for a known client keeps its status and location', async ({ page }) => {
   await openHome(page);
-  await page.locator('#add-event').click();
+  await openNewReminder(page);
   await fillForm(page, { title: 'Follow-up', time: '16:00' });
   const form = page.locator('#event-form');
   await form.locator('[name="clientName"]').fill('ACME LTD.');
@@ -215,7 +223,7 @@ test('a new reminder for a known client keeps its status and location', async ({
 
 test('typing a phone number fills city and country; a hand-typed city is kept', async ({ page }) => {
   await openHome(page, { events: [] });
-  await page.locator('#add-event').click();
+  await openNewReminder(page);
   const form = page.locator('#event-form');
   await form.locator('[name="phone"]').fill('+971 4 123 4567');
   await expect(form.locator('[name="city"]')).toHaveValue('Dubai');
@@ -250,9 +258,9 @@ test('importing sample.xlsx shows the cities detected from phone numbers', async
 test('there is no heart icon anywhere', async ({ page }) => {
   await openHome(page);
   await expect(page.locator('.fa-heart')).toHaveCount(0);
-  await page.locator('#view-month').click();
+  await goToView(page, 'month');
   await expect(page.locator('.fa-heart')).toHaveCount(0);
-  await expect(page.locator('.brand')).toHaveText('Pipeline');
+  await expect(page.locator('.brand')).toHaveText('CladFlo');
 });
 
 test('the page renders at once with no script errors (blank-screen check)', async ({ page }) => {
@@ -265,18 +273,18 @@ test('the page renders at once with no script errors (blank-screen check)', asyn
   await openHome(page);
   await expect(page.locator('.status-card')).toHaveCount(4);
   expect(await page.evaluate(() => typeof XLSX)).toBe('undefined');
-  await page.locator('#view-month').click();
+  await goToView(page, 'month');
   await expect(page.locator('#month-label')).not.toHaveText('—');
   expect(errors).toEqual([]);
 });
 
-test('the app is called Pipeline and the footer credits chrys with a portfolio link', async ({ page }) => {
+test('the app is called CladFlo and the footer credits chrys with a portfolio link', async ({ page }) => {
   await openHome(page);
-  await expect(page).toHaveTitle('Pipeline — Client Reminders & BD Calendar');
-  await expect(page.locator('.brand')).toHaveText('Pipeline');
+  await expect(page).toHaveTitle('CladFlo — Client Reminders & BD Calendar');
+  await expect(page.locator('.brand')).toHaveText('CladFlo');
   const footer = page.locator('.site-footer');
   await expect(footer).toBeVisible();
-  await expect(footer).toHaveText('© 2026 Pipeline · Built by chrys');
+  await expect(footer).toHaveText('© 2026 CladFlo · Built by chrys');
   const link = footer.locator('a', { hasText: 'chrys' });
   await expect(link).toHaveAttribute('href', 'https://portfolio-v2-mu-roan.vercel.app/');
   await expect(link).toHaveAttribute('target', '_blank');

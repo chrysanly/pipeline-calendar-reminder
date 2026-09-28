@@ -1,12 +1,13 @@
 // Entry point: state, wiring, reminder loop.
 
-import { toDateKey, fromDateKey, shiftCursor, formatDayLabel, VIEWS } from './calendar.js';
+import { toDateKey, fromDateKey, shiftCursor, formatDayLabel, VIEWS, CALENDAR_VIEWS } from './calendar.js';
 import { importWorkbook, mergeImported, importSummary, locationsFromPhoneCount } from './importer.js';
 import { buildClients } from './dashboard.js';
 import {
   STORAGE_KEY, loadEvents, localBackend, addEvent, updateEvent, deleteEvent, findEvent,
-  applyClientFields, clientKey
+  applyClientFields, clientKey, STATUS_LABELS
 } from './storage.js';
+import { createRecordStore } from './record-store.js';
 import { startReminderLoop, requestPermission } from './reminders.js';
 import { FIREBASE_CONFIG } from './firebase-config.js';
 import {
@@ -14,10 +15,16 @@ import {
 } from './cloud.js';
 import { initTheme, toggleTheme } from './theme.js';
 import {
-  renderCalendar, renderPanel, renderAuth, isPanelOpen, swipeDirection, COMPACT_QUERY,
+  renderCalendar, renderPanel, isPanelOpen, swipeDirection, COMPACT_QUERY,
   openModal, closeModal, isModalOpen, readForm, showBanner, bindBanner,
-  renderDashboard, bindDashboard, bindForm
+  bindForm, withBusy
 } from './ui.js';
+import { renderAuth, bindAccountMenu, isAccountMenuOpen, closeAccountMenu, trackSave } from './topbar-ui.js';
+import { loadXlsx } from './xlsx-loader.js';
+import { renderDashboard, bindDashboard, loadPageSize, savePageSize } from './dashboard-ui.js';
+import { renderHistory, bindHistory } from './history-ui.js';
+import { renderMinutes, bindMinutes } from './minutes-ui.js';
+import { bindSettings, openSettings, closeSettings, isSettingsOpen } from './settings-ui.js';
 
 const VIEW_KEY = 'view';
 
@@ -42,19 +49,44 @@ let backend = mode === 'local' ? localBackend() : null;
 
 const today = new Date();
 
+const initialView = loadView();
+
 const state = {
-  view: loadView(),
+  view: initialView,
+  // Where the Calendar nav button goes: the last of day/week/month used.
+  calendarView: CALENDAR_VIEWS.includes(initialView) ? initialView : 'month',
   cursor: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
   selectedKey: toDateKey(today),
   openId: null,
+  openDay: null, // the day whose full list the sheet shows ("+N more")
   events: backend ? backend.load() : [],
-  // Home filters: status card, country/city, search box.
-  dash: { status: null, country: null, city: null, search: '' },
+  // Home filters (status, country/city, search) and the client list page.
+  dash: { status: null, country: null, city: null, search: '', page: 1, pageSize: loadPageSize() },
   // Cloud mode until the first snapshot (or sign-out): 'Loading…', not 'No clients'.
-  loading: mode === 'cloud'
+  loading: mode === 'cloud',
+  // Saved meeting minutes and the History log, newest first (record-store.js).
+  meetings: [],
+  history: [],
+  historyFilter: { action: '', client: '', search: '' }
 };
 
 let reminders = null;
+
+const records = createRecordStore({
+  onChange(name, list) {
+    state[name] = list;
+    render();
+  },
+  onError: (title, message) => showBanner(title, message)
+});
+
+/** Add a History entry. kind: 'reminder' | 'client' | 'minutes' | 'data'. */
+function log(action, kind, title, client = '', detail = '') {
+  records.log({ action, kind, title, client, detail });
+}
+
+const reminderWhen = evt => `${evt.date ? formatDayLabel(evt.date) : ''}${evt.time ? `, ${evt.time}` : ''}`;
+const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
 const handlers = {
   onSelectDay(key) {
@@ -64,10 +96,16 @@ const handlers = {
   onOpen(id) {
     openReminder(id);
   },
+  /** "+N more": every reminder of that day in the side sheet. */
   onMore(key) {
     state.selectedKey = key;
-    state.cursor = fromDateKey(key);
-    setView('day');
+    state.openDay = key;
+    state.openId = null;
+    render();
+  },
+  onBackToDay() {
+    state.openId = null;
+    render();
   },
   onEdit(id) {
     openModal(findEvent(state.events, id), state.selectedKey);
@@ -78,13 +116,46 @@ const handlers = {
     if (!confirm(`Delete "${evt.title}"?`)) return;
     if (state.openId === id) state.openId = null;
     commit(deleteEvent(state.events, id));
+    log('delete', 'reminder', evt.title, evt.clientName, reminderWhen(evt));
   },
+  pageSize: () => state.dash.pageSize,
   onDashFilter(patch) {
-    state.dash = { ...state.dash, ...patch };
+    // A new filter or page size starts again from page 1.
+    state.dash = { ...state.dash, page: 1, ...patch };
+    if ('pageSize' in patch) savePageSize(patch.pageSize);
+    render();
+  },
+  onHistoryFilter(patch) {
+    state.historyFilter = { ...state.historyFilter, ...patch };
     render();
   },
   onClientStatus(clientName, status) {
+    const known = handlers.onClientLookup(clientName);
     commit(applyClientFields(state.events, clientName, { status }, new Date().toISOString()));
+    const from = known ? `${STATUS_LABELS[known.status]} → ` : '';
+    log('status', 'client', clientName, clientName, `${from}${STATUS_LABELS[status]}`);
+  },
+  onSaveMinutes(meeting, isNew) {
+    records.commit('meetings', isNew
+      ? [meeting, ...state.meetings]
+      : state.meetings.map(m => (m.id === meeting.id ? meeting : m)));
+    log(isNew ? 'minutes' : 'edit', 'minutes', meeting.title, meeting.clientName, isNew ? 'Saved minutes' : 'Edited minutes');
+  },
+  onDeleteMinutes(meeting) {
+    records.commit('meetings', state.meetings.filter(m => m.id !== meeting.id));
+    log('delete', 'minutes', meeting.title, meeting.clientName, 'Deleted minutes');
+  },
+  onOpenSettings: () => openSettings('ai'),
+  onNotice: (title, body) => showBanner(title, body),
+  /** Every reminder and every set of minutes goes; the History log stays. */
+  async onClearAll() {
+    if (mode === 'cloud' && !backend) throw new Error('Sign in first.');
+    const counts = { reminders: state.events.length, meetings: state.meetings.length };
+    state.openId = null;
+    commit([]);
+    await records.commit('meetings', []);
+    log('clear', 'data', `Cleared ${plural(counts.reminders, 'reminder')}, ${counts.meetings} minutes`);
+    return counts;
   },
   onOpenClient(client) {
     const ref = client.nextReminder || client.latestReminder;
@@ -102,7 +173,7 @@ function commit(events) {
   state.events = events;
   render();
   if (!backend) return;
-  backend.write(prev, events).catch(err => {
+  trackSave(backend.write(prev, events)).catch(err => {
     showBanner('Could not save your change', err && err.message ? err.message : String(err));
   });
 }
@@ -118,6 +189,8 @@ function receive(events) {
 
 function render() {
   if (state.view === 'dashboard') renderDashboard(state, handlers);
+  else if (state.view === 'history') renderHistory(state);
+  else if (state.view === 'minutes') renderMinutes(state, handlers);
   else renderCalendar(state, handlers);
   renderPanel(state, handlers);
 }
@@ -132,11 +205,13 @@ function openReminder(id) {
 
 function closePanel() {
   state.openId = null;
+  state.openDay = null;
   render();
 }
 
 function setView(view) {
   state.view = view;
+  if (CALENDAR_VIEWS.includes(view)) state.calendarView = view;
   try {
     localStorage.setItem(VIEW_KEY, view);
   } catch (err) {
@@ -146,7 +221,7 @@ function setView(view) {
 }
 
 function move(delta) {
-  if (state.view === 'dashboard') return; // no date range on Home
+  if (!CALENDAR_VIEWS.includes(state.view)) return; // no date range on the other pages
   state.cursor = shiftCursor(state.view, state.cursor, delta);
   render();
 }
@@ -158,28 +233,6 @@ function goToToday() {
   render();
 }
 
-// The Excel reader is ~900 KB, so it loads on the first import instead of
-// holding up every page load.
-const XLSX_URL = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-let xlsxLoading = null;
-
-function loadXlsx() {
-  if (typeof XLSX !== 'undefined') return Promise.resolve(XLSX);
-  if (!xlsxLoading) {
-    xlsxLoading = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = XLSX_URL;
-      script.onload = () => (typeof XLSX !== 'undefined' ? resolve(XLSX) : reject(new Error('no XLSX')));
-      script.onerror = () => reject(new Error('offline'));
-      document.head.appendChild(script);
-    }).catch(() => {
-      xlsxLoading = null; // allow a retry once back online
-      throw new Error('The Excel reader did not load. Check your internet connection and try again.');
-    });
-  }
-  return xlsxLoading;
-}
-
 async function importFile(file) {
   try {
     const reader = await loadXlsx();
@@ -189,11 +242,13 @@ async function importFile(file) {
     });
     if (!result.events.length) throw new Error(`No rows with a company name in "${result.sheetName}".`);
 
-    const summary = importSummary(result, formatDayLabel(state.selectedKey));
+    const merged = mergeImported(state.events, result.events);
+    const summary = importSummary(result, formatDayLabel(state.selectedKey), merged);
     const first = result.events[0].date;
     state.selectedKey = first;
     state.cursor = fromDateKey(first);
-    commit(mergeImported(state.events, result.events).events);
+    commit(merged.events);
+    log('import', 'reminder', file.name, '', summary);
     const located = locationsFromPhoneCount(result.events);
     const notes = located ? [`${located} location${located === 1 ? '' : 's'} detected from phone numbers.`] : [];
     showBanner(summary, notes.concat(result.warnings).join(' '));
@@ -229,7 +284,9 @@ function bind() {
   for (const view of VIEWS) {
     document.querySelector(`#view-${view}`).addEventListener('click', () => setView(view));
   }
+  document.querySelector('#view-calendar').addEventListener('click', () => setView(state.calendarView));
   document.querySelector('#theme-toggle').addEventListener('click', toggleTheme);
+  bindAccountMenu();
   document.querySelector('#panel-close').addEventListener('click', closePanel);
   document.querySelector('#panel-backdrop').addEventListener('click', closePanel);
   bindSwipe(document.querySelector('.calendar'));
@@ -240,10 +297,11 @@ function bind() {
   }
   document.querySelector('#add-event').addEventListener('click', () => openModal(null, state.selectedKey));
   const fileInput = document.querySelector('#import-file');
-  document.querySelector('#import-btn').addEventListener('click', () => fileInput.click());
+  const importBtn = document.querySelector('#import-btn');
+  importBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', async () => {
     const [file] = fileInput.files;
-    if (file) await importFile(file);
+    if (file) await withBusy(importBtn, () => importFile(file));
     fileInput.value = ''; // so picking the same file again still fires `change`
   });
   document.querySelector('#modal-close').addEventListener('click', closeModal);
@@ -254,6 +312,9 @@ function bind() {
   bindBanner();
   bindForm(handlers);
   bindDashboard(handlers);
+  bindHistory(handlers);
+  bindMinutes(handlers);
+  bindSettings(handlers);
 
   document.querySelector('#event-form').addEventListener('submit', e => {
     e.preventDefault();
@@ -277,6 +338,7 @@ function bind() {
     state.selectedKey = data.date;
     state.cursor = fromDateKey(data.date);
     commit(next);
+    log(data.id ? 'edit' : 'create', 'reminder', data.title, data.clientName, reminderWhen(data));
     closeModal();
     requestPermission();
     // A reminder that is already due pops up right away, not on the next tick.
@@ -285,11 +347,13 @@ function bind() {
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      if (isModalOpen()) closeModal();
+      if (isAccountMenuOpen()) closeAccountMenu();
+      else if (isSettingsOpen()) closeSettings();
+      else if (isModalOpen()) closeModal();
       else if (isPanelOpen()) closePanel();
       return;
     }
-    if (isModalOpen()) return;
+    if (isModalOpen() || isSettingsOpen()) return;
     if (e.target.matches('input, textarea, select')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
@@ -297,19 +361,25 @@ function bind() {
     else if (e.key === 'ArrowRight') move(1);
     else if (key === 't') goToToday();
     else if (key === 'h') setView('dashboard');
+    else if (key === 'c') setView(state.calendarView);
     else if (key === 'd') setView('day');
     else if (key === 'w') setView('week');
     else if (key === 'm') setView('month');
+    else if (key === 'n') setView('minutes');
+    else if (key === 'l') setView('history');
   });
 
-  // Local mode: another tab saved, so pick up its events. (In cloud mode the
-  // Firestore snapshot keeps every tab and device in sync instead.)
+  // Local mode: another tab saved, so pick up its changes. (In cloud mode the
+  // Firestore snapshots keep every tab and device in sync instead.)
   if (mode === 'local') {
     window.addEventListener('storage', e => {
-      if (e.key !== STORAGE_KEY && e.key !== null) return;
-      receive(loadEvents());
+      if (e.key === STORAGE_KEY || e.key === null) receive(loadEvents());
+      records.reloadKey(e.key);
     });
   }
+
+  // Keep "5 min ago" in the History view current.
+  setInterval(() => { if (state.view === 'history') render(); }, 60000);
 
   // Timers are throttled in background tabs; check as soon as we're back.
   document.addEventListener('visibilitychange', () => {
@@ -369,10 +439,11 @@ function startCloud() {
   const fb = connectFirebase(firebaseSdk, FIREBASE_CONFIG);
   let unsubscribe = null;
 
-  const signIn = () => fb.signIn().catch(err => showBanner('Sign-in failed', signInError(err)));
+  const signIn = e => withBusy(e.currentTarget, () => fb.signIn())
+    .catch(err => showBanner('Sign-in failed', signInError(err)));
   document.querySelector('#sign-in').addEventListener('click', signIn);
   document.querySelector('#prompt-sign-in').addEventListener('click', signIn);
-  document.querySelector('#sign-out').addEventListener('click', () => fb.signOut());
+  document.querySelector('#sign-out').addEventListener('click', e => withBusy(e.currentTarget, () => fb.signOut()));
 
   renderAuth('loading');
   fb.auth.onAuthStateChanged(user => {
@@ -381,6 +452,7 @@ function startCloud() {
 
     if (!user) {
       backend = null;
+      records.disconnect();
       renderAuth('signed-out');
       receive([]);
       return;
@@ -388,6 +460,7 @@ function startCloud() {
 
     const target = cloudBackend(fb.db, user.uid);
     backend = target;
+    records.connect({ db: fb.db, uid: user.uid });
     state.loading = true; // until this account's first snapshot
     renderAuth('signed-in', user);
     unsubscribe = target.subscribe(
@@ -402,7 +475,10 @@ initTheme();
 document.querySelector('#copyright-year').textContent = String(new Date().getFullYear());
 bind();
 if (mode === 'cloud') startCloud();
-else renderAuth('local');
+else {
+  renderAuth('local');
+  records.connect();
+}
 render();
 startReminders();
 requestPermission();

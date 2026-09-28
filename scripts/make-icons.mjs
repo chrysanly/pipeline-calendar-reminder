@@ -12,7 +12,8 @@ const assets = join(root, 'assets');
 const logo = readFileSync(join(assets, 'logo.svg'), 'utf8');
 const logoUrl = `data:image/svg+xml;base64,${Buffer.from(logo).toString('base64')}`;
 
-const PINK = '#ff6fa5';
+const RED = '#e60039';
+const INK = '#2b1b22';
 
 // Transparent-background PNGs of the logo at each size.
 const PLAIN = [
@@ -27,15 +28,23 @@ const logoPage = (size, { scale = 1, background = 'transparent' } = {}) => `<!DO
 <img src="${logoUrl}" width="${Math.round(size * scale)}" height="${Math.round(size * scale)}" alt="">
 </body></html>`;
 
+// Sunburst rays over blush, a white sticker card (ink outline, hard shadow) with the mark and name.
 const ogPage = `<!DOCTYPE html>
-<html><body style="margin:0;width:1200px;height:630px;display:flex;align-items:center;justify-content:center;gap:56px;
-  background:linear-gradient(135deg, ${PINK} 0%, #ff8fbf 60%, #ffe0ec 100%);
-  font-family:'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;color:#ffffff">
-  <img src="${logoUrl}" width="240" height="240" alt=""
-       style="border-radius:60px;box-shadow:0 0 0 10px #ffffff, 0 24px 60px rgba(58,10,31,.25)">
-  <div>
-    <div style="font-size:116px;font-weight:800;letter-spacing:-2px;line-height:1;text-shadow:0 4px 18px rgba(58,10,31,.2)">Pipeline</div>
-    <div style="margin-top:22px;font-size:42px;font-weight:600;color:#3a0a1f">Client reminders &amp; BD calendar</div>
+<html><body style="margin:0;width:1200px;height:630px;display:grid;place-items:center;
+  background:repeating-conic-gradient(from -90deg at 50% 118%, rgba(255,212,0,.2) 0deg 7deg, transparent 7deg 16deg), #ffb6cc;
+  font-family:ui-rounded,'SF Pro Rounded',Nunito,'Segoe UI',system-ui,sans-serif;color:${INK}">
+  <div style="display:flex;align-items:center;gap:48px;padding:56px 72px 56px 56px;background:#ffffff;
+       border:6px solid ${INK};border-radius:48px;box-shadow:0 14px 0 ${INK}">
+    <img src="${logoUrl}" width="220" height="220" alt="">
+    <div>
+      <div style="font-size:120px;font-weight:800;letter-spacing:-3px;line-height:1">CladFlo</div>
+      <div style="margin-top:18px;font-size:40px;font-weight:700">Client reminders &amp; BD calendar</div>
+      <div style="margin-top:24px;display:flex;gap:12px;font-size:26px;font-weight:700">
+        <span style="padding:8px 20px;border-radius:999px;background:${RED};color:#ffffff">Reminders</span>
+        <span style="padding:8px 20px;border-radius:999px;background:#ffd400">Dashboard</span>
+        <span style="padding:8px 20px;border-radius:999px;background:#ffe4ee">Minutes</span>
+      </div>
+    </div>
   </div>
 </body></html>`;
 
@@ -76,10 +85,10 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 const pngs = {};
 for (const [file, size] of PLAIN) pngs[size] = await render(page, logoPage(size), size, size, file, true);
-// iOS shows transparency as black and rounds the corners itself: solid pink, full bleed.
-await render(page, logoPage(180, { background: PINK }), 180, 180, 'apple-touch-icon.png', false);
+// iOS shows transparency as black and rounds the corners itself: solid bow red, full bleed.
+await render(page, logoPage(180, { background: RED }), 180, 180, 'apple-touch-icon.png', false);
 // Maskable: launchers crop to a circle/squircle, so keep the logo in the 80% safe zone.
-await render(page, logoPage(512, { scale: 0.8, background: PINK }), 512, 512, 'icon-maskable-512.png', false);
+await render(page, logoPage(512, { scale: 0.8, background: RED }), 512, 512, 'icon-maskable-512.png', false);
 await render(page, ogPage, 1200, 630, 'og-image.png', false);
 await browser.close();
 

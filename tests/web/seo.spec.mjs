@@ -4,11 +4,13 @@
 // build.spec opens dist/index.html over file://.)
 
 import { test, expect } from './fixtures.mjs';
-import { openApp } from './helpers.mjs';
+import { openApp, goToView } from './helpers.mjs';
 
 const FILES = [
   ['/assets/favicon.ico', /^image\/(x-icon|vnd\.microsoft\.icon)/],
   ['/assets/logo.svg', /^image\/svg\+xml/],
+  ['/assets/logo-wordmark.svg', /^image\/svg\+xml/],
+  ['/assets/favicon-16.png', /^image\/png/],
   ['/assets/favicon-32.png', /^image\/png/],
   ['/assets/apple-touch-icon.png', /^image\/png/],
   ['/assets/icon-192.png', /^image\/png/],
@@ -44,7 +46,7 @@ test('the manifest loads and every icon it lists loads, relative to the manifest
   await openApp(page);
   const href = await page.locator('link[rel="manifest"]').evaluate(l => l.href);
   const manifest = await (await request.get(href)).json();
-  expect(manifest.name).toBe('Pipeline');
+  expect(manifest.name).toBe('CladFlo');
   expect(manifest.start_url).toBe('/');
   for (const icon of manifest.icons) {
     const url = new URL(icon.src, href).href;
@@ -54,7 +56,7 @@ test('the manifest loads and every icon it lists loads, relative to the manifest
 
 test('the head has the SEO and social tags', async ({ page }) => {
   await openApp(page);
-  await expect(page).toHaveTitle('Pipeline — Client Reminders & BD Calendar');
+  await expect(page).toHaveTitle('CladFlo — Client Reminders & BD Calendar');
   const meta = sel => page.locator(sel).first().getAttribute('content');
   expect((await meta('meta[name="description"]')).length).toBeGreaterThan(100);
   expect(await meta('meta[property="og:image"]')).toBe('https://pipeline-9944d.web.app/assets/og-image.png');
@@ -64,7 +66,21 @@ test('the head has the SEO and social tags', async ({ page }) => {
   expect(JSON.parse(ld)['@type']).toBe('WebApplication');
 });
 
-test('the top-bar logo is an inline SVG, visible at 28px; still no heart', async ({ page }) => {
+test('every visible name, tag, JSON-LD and the manifest say CladFlo, never Pipeline', async ({ page, request }) => {
+  await openApp(page);
+  const tags = await page.locator('title, meta[name="description"], meta[property^="og:"], meta[name^="twitter:"], meta[name="application-name"], meta[name="apple-mobile-web-app-title"]')
+    .evaluateAll(els => els.map(el => el.content ?? el.textContent));
+  const ld = await page.locator('script[type="application/ld+json"]').textContent();
+  expect(JSON.parse(ld).name).toBe('CladFlo');
+  const manifest = await (await request.get('/assets/manifest.webmanifest')).text();
+  const visible = await page.locator('body').innerText();
+  // The Firebase address (pipeline-9944d.web.app) can't be renamed, so URLs are exempt.
+  const texts = [...tags, ld, manifest, visible].map(t => t.replace(/pipeline-9944d/g, ''));
+  for (const text of texts) expect(text).not.toMatch(/pipeline/i);
+  expect(await page.locator('meta[property="og:site_name"]').getAttribute('content')).toBe('CladFlo');
+});
+
+test('the top-bar logo is an inline SVG, 28px on phones, 34px wide screens; still no heart', async ({ page }) => {
   await openApp(page);
   const logo = page.locator('.brand svg.brand-logo');
   await expect(logo).toBeVisible();
@@ -72,10 +88,10 @@ test('the top-bar logo is an inline SVG, visible at 28px; still no heart', async
   const box = await logo.boundingBox();
   expect(box.width).toBeGreaterThanOrEqual(20);
   expect(box.height).toBeGreaterThanOrEqual(20);
-  expect(Math.round(box.width)).toBe(28);
-  // It really paints the pink tile (not an empty box).
-  expect(await logo.locator('rect').getAttribute('fill')).toBe('#ff6fa5');
-  await expect(page.locator('.brand')).toHaveText('Pipeline');
+  expect([28, 34]).toContain(Math.round(box.width));
+  // It really paints the bow-red tile (not an empty box).
+  expect(await logo.locator('rect').getAttribute('fill')).toBe('#e60039');
+  await expect(page.locator('.brand')).toHaveText('CladFlo');
   await expect(page.locator('.fa-heart')).toHaveCount(0);
 });
 
@@ -95,7 +111,7 @@ test('Home loads with no failed same-origin requests and renders the dashboard',
   await expect(page.locator('#dashboard')).toBeVisible();
   await expect(page.locator('.status-card')).toHaveCount(4);
   await expect(page.locator('.brand svg.brand-logo')).toBeVisible();
-  await page.locator('#view-month').click();
+  await goToView(page, 'month');
   await expect(page.locator('#month-label')).not.toHaveText(/^\s*—?\s*$/);
   expect(failures).toEqual([]);
 });

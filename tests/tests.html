@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pipeline — tests</title>
+  <title>CladFlo — tests</title>
   <style>
     body { font: 14px/1.6 system-ui, sans-serif; margin: 24px; max-width: 760px; }
     h1 { font-size: 18px; }
@@ -15,7 +15,7 @@
   </style>
 </head>
 <body>
-  <h1>Pipeline — test suite</h1>
+  <h1>CladFlo — test suite</h1>
   <p id="summary">running…</p>
   <ul id="results"></ul>
 
@@ -29,8 +29,13 @@
     import './ui-pure.test.js';
     import './importer.test.js';
     import { cloudTestsDone } from './cloud.test.js';
+    import './transcript.test.js';
+    import { recordsTestsDone } from './records.test.js';
+    import './history.test.js';
+    import { groqTestsDone } from './groq.test.js';
+    import { minutesTestsDone } from './minutes.test.js';
     import { report } from './runner.js';
-    await cloudTestsDone;
+    await Promise.all([cloudTestsDone, recordsTestsDone, groqTestsDone, minutesTestsDone]);
     report();
   </script>
 </body>

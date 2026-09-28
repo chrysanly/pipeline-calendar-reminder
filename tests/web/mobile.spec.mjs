@@ -88,6 +88,9 @@ const rectOf = locator => locator.evaluate(n => {
   return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height, vw: innerWidth, vh: innerHeight };
 });
 
+/** Wait until a sliding sheet or modal has landed. */
+const settle = locator => locator.evaluate(n => Promise.all(n.getAnimations().map(a => a.finished)));
+
 /** Open a reminder's details the way a user would on this screen size. */
 async function openDetails(page, title) {
   if (isPhone()) {
@@ -127,12 +130,12 @@ test('the brand logo fits the top bar without sideways scrolling', async ({ page
   const logo = page.locator('.brand .brand-logo');
   await expect(logo).toBeVisible();
   const r = await rectOf(logo);
-  expect(Math.round(r.width)).toBe(isPhone() ? 24 : 28);
+  expect(Math.round(r.width)).toBe(isPhone() ? 28 : 34);
   expect(r.left).toBeGreaterThanOrEqual(0);
   expect(r.right).toBeLessThanOrEqual(r.vw);
   // Logo and name stay on one line, clear of the icon buttons.
   const brand = await rectOf(page.locator('.brand'));
-  const firstButton = await rectOf(page.locator(isPhone() ? '#import-btn' : '#theme-toggle'));
+  const firstButton = await rectOf(page.locator('#theme-toggle'));
   expect(brand.right).toBeLessThanOrEqual(firstButton.left);
   expect(brand.height).toBeLessThan(40);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(r.vw);
@@ -193,7 +196,8 @@ test('New reminder: the button opens a form that fits, and Save works', async ({
 
   await add.tap();
   await expect(page.locator('#modal')).toBeVisible();
-  const card = await rectOf(page.locator('.modal-card'));
+  await settle(page.locator('#modal .modal-card'));
+  const card = await rectOf(page.locator('#modal .modal-card'));
   expect(card.left).toBeGreaterThanOrEqual(0);
   expect(card.top).toBeGreaterThanOrEqual(0);
   expect(card.right).toBeLessThanOrEqual(card.vw + 0.5);
@@ -222,13 +226,14 @@ test('form on phones: date and time stack, Cancel/Save stay pinned at the bottom
   test.skip(!isPhone(), 'phone layout only');
   await open(page, { events: [] });
   await page.locator('#add-event').tap();
+  await settle(page.locator('#modal .modal-card'));
 
   const date = await rectOf(page.locator('#event-form [name="date"]'));
   const time = await rectOf(page.locator('#event-form [name="time"]'));
   expect(time.top).toBeGreaterThan(date.bottom - 1);
 
   // Scroll the form to the top: the actions are still on screen at the bottom.
-  await page.locator('.modal-card').evaluate(n => { n.scrollTop = 0; });
+  await page.locator('#modal .modal-card').evaluate(n => { n.scrollTop = 0; });
   const actions = await rectOf(page.locator('.modal-actions'));
   expect(actions.bottom).toBeGreaterThan(actions.vh - 2);
   expect(actions.width).toBeGreaterThan(actions.vw - 2);
@@ -333,8 +338,8 @@ test('tapping a title opens the details sheet on screen; backdrop and ✕ close 
     expect(Math.round(panel.bottom)).toBe(panel.vh);
     expect(panel.height).toBeLessThanOrEqual(panel.vh * 0.85 + 1);
   } else {
-    // A 360px side sheet on the right.
-    expect(Math.round(panel.width)).toBe(360);
+    // A 380px side sheet on the right.
+    expect(Math.round(panel.width)).toBe(380);
     expect(Math.round(panel.right)).toBe(panel.vw);
   }
   await expect(page.locator('#panel-backdrop')).toBeVisible();
@@ -403,8 +408,8 @@ test('swiping in day view moves by one day', async ({ page }) => {
   await expect(page.locator('#month-label')).toHaveText('Mon, 28 Sep 2026');
 });
 
-test('tapping Import opens the file chooser', async ({ page }) => {
-  await open(page);
+test('Import sits on Home; tapping it opens the file chooser', async ({ page }) => {
+  await open(page, { view: 'dashboard' });
   const chooser = page.waitForEvent('filechooser');
   await page.locator('#import-btn').tap();
   expect((await chooser).isMultiple()).toBe(false);

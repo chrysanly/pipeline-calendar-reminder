@@ -1,5 +1,5 @@
 import { test, assertEqual, assertDeepEqual } from './runner.js';
-import { buildClients, statusCounts, locationTree, filterClients, NO_CLIENT } from '../js/dashboard.js';
+import { buildClients, statusCounts, locationTree, filterClients, paginate, parsePageSize, NO_CLIENT } from '../js/dashboard.js';
 
 const NOW = new Date(2026, 8, 27, 10, 0);
 let n = 0;
@@ -95,4 +95,30 @@ test('filterClients by status, country, city and search', () => {
   assertDeepEqual(names({ search: 'jlt' }), ['Acme']);
   assertDeepEqual(names({ search: '  FAL ' }), ['Falcon']);
   assertDeepEqual(names({ search: 'abu' }), ['Falcon']);
+});
+
+// ---------- pagination ----------
+
+const range = n => Array.from({ length: n }, (_, i) => i + 1);
+
+test('paginate: pages of 25, with 1-based start and end', () => {
+  const first = paginate(range(60), 1, 25);
+  assertDeepEqual([first.page, first.pages, first.start, first.end, first.total], [1, 3, 1, 25, 60]);
+  assertEqual(first.items.length, 25);
+  const last = paginate(range(60), 3, 25);
+  assertDeepEqual([last.start, last.end, last.items[0]], [51, 60, 51]);
+});
+
+test('paginate clamps the page into range and handles an empty list', () => {
+  assertEqual(paginate(range(10), 9, 25).page, 1);
+  assertEqual(paginate(range(60), 0, 25).page, 1);
+  assertEqual(paginate(range(60), 7, 25).page, 3);
+  assertDeepEqual(paginate([], 1, 25), { items: [], page: 1, pages: 1, start: 0, end: 0, total: 0 });
+});
+
+test('parsePageSize accepts whole numbers 1–1000, else the fallback', () => {
+  assertEqual(parsePageSize('40'), 40);
+  assertEqual(parsePageSize(100), 100);
+  assertEqual(parsePageSize('5000'), 1000);
+  for (const bad of ['', '0', '-3', '2.5', 'abc', null]) assertEqual(parsePageSize(bad, 50), 50);
 });

@@ -105,3 +105,26 @@ export function filterClients(clients, { status = null, country = null, city = n
     (!needle || [c.name, c.phone, c.location, c.city, c.country]
       .some(v => (v || '').toLowerCase().includes(needle))));
 }
+
+export const PAGE_SIZES = [25, 50, 100];
+export const MAX_PAGE_SIZE = 1000;
+
+/** A page size from user input: a whole number from 1 to MAX_PAGE_SIZE, else the fallback. */
+export function parsePageSize(value, fallback = PAGE_SIZES[0]) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) return fallback;
+  return Math.min(n, MAX_PAGE_SIZE);
+}
+
+/**
+ * One page of a list. `page` is 1-based and clamped to the pages there are.
+ * @returns {{items: any[], page: number, pages: number, start: number, end: number, total: number}}
+ */
+export function paginate(list, page = 1, size = PAGE_SIZES[0]) {
+  const total = list.length;
+  const pages = Math.max(1, Math.ceil(total / size));
+  const current = Math.min(Math.max(1, Math.floor(page) || 1), pages);
+  const from = (current - 1) * size;
+  const items = list.slice(from, from + size);
+  return { items, page: current, pages, start: total ? from + 1 : 0, end: from + items.length, total };
+}

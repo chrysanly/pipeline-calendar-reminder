@@ -1,6 +1,6 @@
 import { test, assert, assertEqual, assertDeepEqual, fakeStorage } from './runner.js';
 import {
-  diffEvents, planMigration, selectBackend, isConfigured, cloudBackend
+  diffEvents, planMigration, selectBackend, isConfigured, cloudBackend, collectionBackend
 } from '../js/cloud.js';
 import { localBackend, STORAGE_KEY } from '../js/storage.js';
 
@@ -156,6 +156,29 @@ later('cloudBackend.fetchServer returns normalized reminders with their ids', as
   assertEqual(list[0].id, 'x1');
   assertEqual(list[0].title, 'Call');
   assertEqual(list[0].notified, false);
+});
+
+test('diffEvents compares nested fields too (minutes hold arrays of objects)', () => {
+  const m = { id: 'm', actionItems: [{ task: 'Call', owner: 'Anna' }] };
+  const reordered = { actionItems: [{ owner: 'Anna', task: 'Call' }], id: 'm' };
+  assertDeepEqual(diffEvents([m], [reordered]).upserts, []);
+  const edited = { id: 'm', actionItems: [{ task: 'Call', owner: 'Omar' }] };
+  assertDeepEqual(diffEvents([m], [edited]).upserts.map(r => r.id), ['m']);
+});
+
+later('collectionBackend writes meetings and history at users/{uid}/<name>/{id}', async () => {
+  const db = fakeDb();
+  const meetings = collectionBackend(db, 'uid-1', 'meetings');
+  const history = collectionBackend(db, 'uid-1', 'history', r => ({ ...r, normalized: true }));
+  assertEqual(meetings.kind, 'cloud');
+  await meetings.write([], [{ id: 'm1', title: 'Kickoff' }]);
+  await history.write([], [{ id: 'h1', action: 'create' }]);
+  assertDeepEqual([...db.docs.keys()], ['users/uid-1/meetings/m1', 'users/uid-1/history/h1']);
+  assertDeepEqual(db.docs.get('users/uid-1/meetings/m1'), { title: 'Kickoff' });
+  const list = await history.fetchServer();
+  assertDeepEqual(list, [{ action: 'create', id: 'h1', normalized: true }]);
+  await meetings.write([{ id: 'm1', title: 'Kickoff' }], []);
+  assertDeepEqual([...db.docs.keys()], ['users/uid-1/history/h1']);
 });
 
 export const cloudTestsDone = Promise.all(pending);

@@ -10,7 +10,14 @@ import { generateConfig } from './scripts/gen-config.mjs';
 const root = dirname(fileURLToPath(import.meta.url));
 
 // Dependency order: every module only uses names defined above it.
-const MODULES = ['calendar.js', 'storage.js', 'reminders.js', 'phone-location.js', 'importer.js', 'dashboard.js', 'firebase-config.js', 'cloud.js', 'theme.js', 'ui.js', 'app.js'];
+const MODULES = [
+  'calendar.js', 'storage.js', 'reminders.js', 'phone-location.js', 'importer.js', 'dashboard.js',
+  'firebase-config.js', 'cloud.js', 'records.js', 'history.js', 'transcript.js', 'groq.js', 'minutes.js',
+  'record-store.js', 'theme.js', 'xlsx-loader.js', 'ui.js', 'topbar-ui.js', 'dashboard-ui.js', 'settings-ui.js', 'history-ui.js', 'minutes-ui.js', 'app.js'
+];
+
+// Inlined in this order, each where index.html links it.
+const STYLESHEETS = ['tokens.css', 'components.css', 'styles.css', 'nav.css', 'dashboard.css', 'responsive.css', 'features.css'];
 
 const IMPORT_RE = /^import\s+[\s\S]*?from\s+'\.\/[\w.-]+';?[ \t]*\r?\n/gm;
 const EXPORT_RE = /^export\s+(?=(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var)\b)/gm;
@@ -59,21 +66,24 @@ function build() {
   // js/firebase-config.js is generated from .env (git-ignored): always fresh.
   generateConfig();
   const html = readFileSync(join(root, 'index.html'), 'utf8');
-  const css = readFileSync(join(root, 'css', 'styles.css'), 'utf8').trim();
   const js = bundleJs();
 
-  const LINK_RE = /[ \t]*<link rel="stylesheet" href="css\/styles\.css">/;
+  const linkRe = file => new RegExp(`[ \\t]*<link rel="stylesheet" href="css/${file.replace('.', '\\.')}">`);
   const SCRIPT_RE = /[ \t]*<script type="module" src="js\/app\.js"><\/script>/;
+  const tags = [...STYLESHEETS.map(file => [linkRe(file), `stylesheet link to css/${file}`]), [SCRIPT_RE, 'module script tag']];
 
-  for (const [re, what] of [[LINK_RE, 'stylesheet link'], [SCRIPT_RE, 'module script tag']]) {
+  for (const [re, what] of tags) {
     if (!re.test(html)) {
       throw new Error(`index.html no longer has the ${what} build.mjs inlines — update build.mjs.`);
     }
   }
 
-  const out = html
-    .replace(LINK_RE, () => `  <style>\n${css}\n  </style>`)
-    .replace(SCRIPT_RE, () => `  <script>\n${js}\n  </script>`);
+  let out = html;
+  for (const file of STYLESHEETS) {
+    const css = readFileSync(join(root, 'css', file), 'utf8').trim();
+    out = out.replace(linkRe(file), () => `  <style>\n${css}\n  </style>`);
+  }
+  out = out.replace(SCRIPT_RE, () => `  <script>\n${js}\n  </script>`);
 
   const dist = join(root, 'dist');
   mkdirSync(dist, { recursive: true });

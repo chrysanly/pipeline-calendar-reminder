@@ -30,7 +30,7 @@ for (const [label, close] of [
   ['Cancel', page => page.locator('#modal-cancel').click()],
   ['the close button', page => page.locator('#modal-close').click()],
   ['the Escape key', page => page.keyboard.press('Escape')],
-  ['a backdrop click', page => page.locator('.modal-backdrop').click({ position: { x: 5, y: 5 } })]
+  ['a backdrop click', page => page.locator('#modal .modal-backdrop').click({ position: { x: 5, y: 5 } })]
 ]) {
   test(`${label} hides the modal`, async ({ page }) => {
     await page.locator('#add-event').click();

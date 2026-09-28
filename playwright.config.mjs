@@ -20,22 +20,22 @@ export default defineConfig({
   projects: [
     {
       name: 'desktop',
-      testIgnore: '**/mobile.spec.mjs',
+      testIgnore: '**/mobile*.spec.mjs',
       use: { ...devices['Desktop Chrome'] }
     },
     {
       name: 'mobile',
-      testMatch: '**/mobile.spec.mjs',
+      testMatch: '**/mobile*.spec.mjs',
       use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }
     },
     {
       name: 'small',
-      testMatch: '**/mobile.spec.mjs',
+      testMatch: '**/mobile*.spec.mjs',
       use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 740 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }
     },
     {
       name: 'tablet',
-      testMatch: '**/mobile.spec.mjs',
+      testMatch: '**/mobile*.spec.mjs',
       use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 }, deviceScaleFactor: 2, hasTouch: true }
     }
   ],

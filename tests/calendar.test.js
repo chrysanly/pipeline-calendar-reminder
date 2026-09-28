@@ -1,7 +1,7 @@
 import { test, assert, assertEqual, assertDeepEqual } from './runner.js';
 import {
   getMonthGrid, toDateKey, fromDateKey, addMonths, formatMonthLabel, formatDayLabel,
-  addDays, startOfWeek, getWeekDays, shiftCursor, formatRangeLabel, eventsSortedByTime
+  addDays, startOfWeek, getWeekDays, shiftCursor, formatRangeLabel, eventsSortedByTime, VIEWS, CALENDAR_VIEWS
 } from '../js/calendar.js';
 
 test('toDateKey zero-pads month and day', () => {
@@ -141,4 +141,9 @@ test('eventsSortedByTime orders by date then time without mutating', () => {
   ];
   assertDeepEqual(eventsSortedByTime(list).map(e => e.id), ['z', 'a', 'b', 'c']);
   assertEqual(list[0].id, 'c', 'input list was mutated');
+});
+
+test('VIEWS: Home, the 3 calendar views, Minutes and History', () => {
+  assertDeepEqual(VIEWS, ['dashboard', 'day', 'week', 'month', 'minutes', 'history']);
+  assertDeepEqual(CALENDAR_VIEWS, ['day', 'week', 'month']);
 });

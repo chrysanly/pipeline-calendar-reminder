@@ -3,36 +3,36 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#ff6fa5">
-  <title>Pipeline — Client Reminders &amp; BD Calendar</title>
+  <meta name="theme-color" content="#e60039">
+  <title>CladFlo — Client Reminders &amp; BD Calendar</title>
   <meta name="description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
   <meta name="robots" content="index,follow">
-  <meta name="author" content="Pipeline">
+  <meta name="author" content="CladFlo">
   <link rel="canonical" href="https://pipeline-9944d.web.app/">
 
   <!-- Icons live in assets/ in the source and in dist/; favicon.ico, robots.txt
        and sitemap.xml are also copied to the root of dist/. ?v= busts old caches. -->
-  <link rel="icon" href="assets/favicon.ico?v=2" sizes="any">
-  <link rel="icon" href="assets/logo.svg?v=2" type="image/svg+xml">
-  <link rel="icon" href="assets/favicon-32.png?v=2" type="image/png" sizes="32x32">
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">
+  <link rel="icon" href="assets/favicon.ico?v=4" sizes="any">
+  <link rel="icon" href="assets/logo.svg?v=4" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon-32.png?v=4" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4">
   <link rel="manifest" href="assets/manifest.webmanifest">
-  <meta name="apple-mobile-web-app-title" content="Pipeline">
+  <meta name="apple-mobile-web-app-title" content="CladFlo">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
 
   <!-- Social previews -->
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="Pipeline">
-  <meta property="og:title" content="Pipeline — Client Reminders &amp; BD Calendar">
+  <meta property="og:site_name" content="CladFlo">
+  <meta property="og:title" content="CladFlo — Client Reminders &amp; BD Calendar">
   <meta property="og:description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
   <meta property="og:url" content="https://pipeline-9944d.web.app/">
   <meta property="og:image" content="https://pipeline-9944d.web.app/assets/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Pipeline logo with the tagline Client reminders and BD calendar">
+  <meta property="og:image:alt" content="CladFlo logo with the tagline Client reminders and BD calendar">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Pipeline — Client Reminders &amp; BD Calendar">
+  <meta name="twitter:title" content="CladFlo — Client Reminders &amp; BD Calendar">
   <meta name="twitter:description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
   <meta name="twitter:image" content="https://pipeline-9944d.web.app/assets/og-image.png">
 
@@ -40,7 +40,7 @@
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    "name": "Pipeline",
+    "name": "CladFlo",
     "url": "https://pipeline-9944d.web.app/",
     "description": "Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.",
     "applicationCategory": "BusinessApplication",
@@ -50,7 +50,13 @@
   }
   </script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/nav.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/responsive.css">
+  <link rel="stylesheet" href="css/features.css">
 </head>
 <body>
   <div id="banner" class="banner" role="status" aria-live="polite" hidden>
@@ -63,27 +69,37 @@
   </div>
 
   <header class="topbar">
-    <h1 class="brand"><svg class="brand-logo" viewBox="0 0 64 64" width="28" height="28" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="16" fill="#ff6fa5"/><path fill="#ffffff" fill-rule="evenodd" d="M19 15H33A11.5 11.5 0 0 1 33 38H27V49H19Z M27 22.5V30.5H32.5A4 4 0 0 0 32.5 22.5Z"/><circle cx="50" cy="14" r="6.5" fill="#e60039" stroke="#ffd400" stroke-width="3"/></svg>Pipeline</h1>
-    <div class="nav">
-      <button id="prev" type="button" class="icon" aria-label="Previous"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
-      <h2 id="month-label" class="month-label">—</h2>
-      <button id="next" type="button" class="icon" aria-label="Next"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
-      <button id="today" type="button" class="ghost">Today</button>
-    </div>
-    <div class="views" role="group" aria-label="View">
+    <h1 class="brand"><svg class="brand-logo" viewBox="0 0 64 64" width="34" height="34" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/><path d="M32 23V15M21 26.9L17 20M43 26.9L47 20M13 35L6.1 31M51 35L57.9 31" fill="none" stroke="#ffd400" stroke-width="4.5" stroke-linecap="round"/><path d="M17.2 43.4A15 15 0 0 1 46.8 43.4" fill="none" stroke="#ffd400" stroke-width="6.5" stroke-linecap="round"/><path d="M23.5 42.9A9 9 0 0 1 38.9 40.2" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/><path d="M14 53H50" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/></svg>CladFlo</h1>
+    <nav class="views" aria-label="Main">
       <button id="view-dashboard" type="button" data-view="dashboard" title="Home (H)"><i class="fa-solid fa-house" aria-hidden="true"></i> <span class="btn-label">Home</span></button>
-      <button id="view-day" type="button" data-view="day" title="Day (D)"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> <span class="btn-label">Day</span></button>
-      <button id="view-week" type="button" data-view="week" title="Week (W)"><i class="fa-solid fa-calendar-week" aria-hidden="true"></i> <span class="btn-label">Week</span></button>
-      <button id="view-month" type="button" data-view="month" title="Month (M)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Month</span></button>
-    </div>
-    <button id="theme-toggle" type="button" class="icon" aria-label="Toggle theme"><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
-    <button id="import-btn" type="button" class="ghost" aria-label="Import Excel" title="Import reminders from an Excel file"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> <span class="btn-label">Import Excel</span></button>
-    <input type="file" id="import-file" accept=".xlsx,.xls,.csv" hidden>
-    <button id="add-event" type="button" class="primary" aria-label="New reminder"><i class="fa-solid fa-plus" aria-hidden="true"></i> <span class="btn-label">New reminder</span></button>
-    <div id="auth-area" class="auth-area" hidden>
-      <button id="sign-in" type="button" class="ghost" aria-label="Sign in with Google" hidden><i class="fa-brands fa-google" aria-hidden="true"></i> <span class="btn-label">Sign in with Google</span></button>
-      <span id="user-name" class="user-name" hidden></span>
-      <button id="sign-out" type="button" class="icon" aria-label="Sign out" title="Sign out" hidden><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i></button>
+      <button id="view-calendar" type="button" data-view="calendar" title="Calendar (C)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Calendar</span></button>
+      <button id="view-minutes" type="button" data-view="minutes" title="Minutes (N)"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> <span class="btn-label">Minutes</span></button>
+      <button id="view-history" type="button" data-view="history" title="History (L)"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> <span class="btn-label">History</span></button>
+    </nav>
+    <div class="topbar-actions">
+      <span id="sync-status" class="sync-status" role="status" aria-live="polite" hidden></span>
+      <button id="theme-toggle" type="button" class="icon" aria-label="Toggle theme"><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
+      <button id="settings-btn" type="button" class="icon" aria-label="Settings" title="Settings"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>
+      <div id="auth-area" class="auth-area" hidden>
+        <button id="sign-in" type="button" class="primary" aria-label="Sign in with Google" hidden><i class="fa-brands fa-google" aria-hidden="true"></i> <span class="btn-label">Sign in</span></button>
+        <div id="account" class="account" hidden>
+          <button id="account-btn" type="button" class="account-btn" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu">
+            <span id="account-initial" class="avatar" aria-hidden="true"></span>
+            <span id="user-name" class="user-name"></span>
+            <i class="fa-solid fa-chevron-down account-caret" aria-hidden="true"></i>
+          </button>
+          <div id="account-menu" class="account-menu" hidden>
+            <div class="account-info">
+              <span id="account-menu-initial" class="avatar avatar-lg" aria-hidden="true"></span>
+              <span class="account-text">
+                <strong id="account-name" class="account-name"></strong>
+                <span id="account-email" class="account-email"></span>
+              </span>
+            </div>
+            <button id="sign-out" type="button" class="ghost account-signout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out</button>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -96,6 +112,14 @@
   <main class="layout">
     <!-- Home: every client, their status and where they are. Filled by ui.js. -->
     <section id="dashboard" class="dashboard" aria-label="Clients dashboard" hidden>
+      <div class="page-head">
+        <div>
+          <h2 class="page-title">Home</h2>
+          <p class="page-sub">Everyone you're following up with, by status and place.</p>
+        </div>
+        <button id="import-btn" type="button" class="secondary" title="Import reminders from an Excel file"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> <span class="btn-label">Import Excel</span></button>
+        <input type="file" id="import-file" accept=".xlsx,.xls,.csv" hidden>
+      </div>
       <div id="status-cards" class="status-cards"></div>
       <div class="dash-body">
         <section class="dash-card dash-locations" aria-labelledby="locations-title">
@@ -105,15 +129,136 @@
         <section class="dash-card dash-clients" aria-labelledby="clients-title">
           <div class="dash-clients-head">
             <h2 id="clients-title" class="dash-title"><i class="fa-solid fa-users" aria-hidden="true"></i> Clients <span id="client-count" class="client-count"></span></h2>
-            <input type="search" id="client-search" class="client-search" placeholder="Search name, phone, city…" aria-label="Search clients" autocomplete="off">
+            <div class="client-filters">
+              <input type="search" id="client-search" class="client-search" placeholder="Search name, phone, city…" aria-label="Search clients" autocomplete="off">
+              <select id="client-status-filter" class="client-status-filter" aria-label="Filter by status">
+                <option value="">All statuses</option>
+                <option value="lead">Lead</option>
+                <option value="potential">Potential</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
           </div>
           <div id="active-filters" class="active-filters"></div>
           <div id="client-list" class="client-list"></div>
+          <nav id="client-pager" class="pager" aria-label="Client pages" hidden>
+            <p id="pager-info" class="pager-info" aria-live="polite"></p>
+            <label class="pager-size">Show
+              <select id="page-size" aria-label="Clients per page">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="custom">Custom…</option>
+              </select>
+              <input type="number" id="page-size-custom" class="page-size-custom" min="1" max="1000" step="1" inputmode="numeric" aria-label="Custom clients per page" hidden>
+            </label>
+            <div class="pager-nav">
+              <button id="page-prev" type="button" class="ghost" aria-label="Previous page"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> <span class="btn-label">Prev</span></button>
+              <span id="page-label" class="page-label"></span>
+              <button id="page-next" type="button" class="ghost" aria-label="Next page"><span class="btn-label">Next</span> <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+            </div>
+          </nav>
         </section>
       </div>
     </section>
 
+    <!-- Meeting minutes from a transcript, with Groq. Filled by minutes-ui.js. -->
+    <section id="minutes" class="page minutes" aria-label="Meeting minutes" hidden>
+      <div class="minutes-work">
+        <section class="dash-card" aria-labelledby="minutes-title">
+          <h2 id="minutes-title" class="dash-title"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> Meeting minutes</h2>
+          <form id="minutes-form" class="stack-form" novalidate>
+            <div class="row">
+              <label>Client
+                <input type="text" id="minutes-client" list="minutes-clients" placeholder="Acme Ltd." autocomplete="off">
+              </label>
+              <label>Date
+                <input type="date" id="minutes-date">
+              </label>
+            </div>
+            <datalist id="minutes-clients"></datalist>
+            <label>Transcript
+              <textarea id="minutes-transcript" rows="10" placeholder="Paste the meeting transcript here, or import a .txt, .md, .vtt or .srt file."></textarea>
+            </label>
+            <p id="minutes-file-info" class="form-hint"></p>
+            <div class="minutes-actions">
+              <button id="minutes-import" type="button" class="ghost"><i class="fa-solid fa-file-import" aria-hidden="true"></i> Import transcript</button>
+              <input type="file" id="minutes-file" accept=".txt,.md,.vtt,.srt" hidden>
+              <button id="minutes-generate" type="submit" class="primary"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Generate</button>
+            </div>
+            <p id="minutes-progress" class="minutes-progress" role="status" aria-live="polite"></p>
+            <button id="minutes-open-settings" type="button" class="ghost" hidden><i class="fa-solid fa-gear" aria-hidden="true"></i> Open AI settings</button>
+          </form>
+        </section>
+
+        <section id="minutes-editor" class="dash-card" aria-label="Edit the minutes" hidden>
+          <form id="minutes-edit" class="stack-form" novalidate>
+            <label>Title
+              <input type="text" name="title">
+            </label>
+            <div class="row">
+              <label>Date
+                <input type="date" name="date">
+              </label>
+              <label>Attendees
+                <input type="text" name="attendees" placeholder="Anna, Omar">
+              </label>
+            </div>
+            <label>Summary
+              <textarea name="summary" rows="5"></textarea>
+            </label>
+            <label>Decisions <span class="label-hint">one per line</span>
+              <textarea name="decisions" rows="4"></textarea>
+            </label>
+            <label>Action items <span class="label-hint">task | owner | due, one per line</span>
+              <textarea name="actionItems" rows="4"></textarea>
+            </label>
+            <div class="minutes-actions">
+              <button id="minutes-discard" type="button" class="ghost">Discard</button>
+              <button id="minutes-copy" type="button" class="ghost"><i class="fa-solid fa-copy" aria-hidden="true"></i> Copy</button>
+              <button id="minutes-save" type="submit" class="primary"><i class="fa-solid fa-floppy-disk" aria-hidden="true"></i> Save minutes</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <section class="dash-card minutes-saved" aria-labelledby="saved-title">
+        <h2 id="saved-title" class="dash-title"><i class="fa-solid fa-folder-open" aria-hidden="true"></i> Saved minutes <span id="saved-count" class="client-count"></span></h2>
+        <div id="saved-minutes" class="saved-minutes"></div>
+      </section>
+    </section>
+
+    <!-- Every change, newest first. Filled by history-ui.js. -->
+    <section id="history" class="page history" aria-label="History log" hidden>
+      <section class="dash-card">
+        <div class="page-head">
+          <h2 class="dash-title"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> History <span id="history-count" class="client-count"></span></h2>
+          <div class="history-filters">
+            <select id="history-action" aria-label="Filter by action"></select>
+            <select id="history-client" aria-label="Filter by client"></select>
+            <input type="search" id="history-search" class="client-search" placeholder="Search history…" aria-label="Search history" autocomplete="off">
+          </div>
+        </div>
+        <ol id="history-list" class="history-list"></ol>
+      </section>
+    </section>
+
     <section class="calendar" aria-label="Calendar">
+      <div class="cal-toolbar">
+        <div class="nav">
+          <button id="prev" type="button" class="icon" aria-label="Previous"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+          <button id="next" type="button" class="icon" aria-label="Next"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+          <button id="today" type="button" class="ghost">Today</button>
+          <h2 id="month-label" class="month-label">—</h2>
+        </div>
+        <div class="cal-views" role="group" aria-label="Calendar view">
+          <button id="view-day" type="button" data-view="day" title="Day (D)"><i class="fa-solid fa-calendar-day" aria-hidden="true"></i> <span class="btn-label">Day</span></button>
+          <button id="view-week" type="button" data-view="week" title="Week (W)"><i class="fa-solid fa-calendar-week" aria-hidden="true"></i> <span class="btn-label">Week</span></button>
+          <button id="view-month" type="button" data-view="month" title="Month (M)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Month</span></button>
+        </div>
+        <button id="add-event" type="button" class="primary" aria-label="New reminder"><i class="fa-solid fa-plus" aria-hidden="true"></i> <span class="btn-label">New reminder</span></button>
+      </div>
       <div id="weekdays" class="weekdays"></div>
       <div id="grid" class="grid"></div>
       <!-- Phones only: the selected day's reminders under the compact month grid. -->
@@ -134,7 +279,7 @@
   </main>
 
   <footer class="site-footer">
-    &copy; <span id="copyright-year">2026</span> Pipeline &middot; Built by <a href="https://portfolio-v2-mu-roan.vercel.app/" target="_blank" rel="noopener">chrys</a>
+    &copy; <span id="copyright-year">2026</span> CladFlo &middot; Built by <a href="https://portfolio-v2-mu-roan.vercel.app/" target="_blank" rel="noopener">chrys</a>
   </footer>
 
   <div id="modal" class="modal" hidden>
@@ -215,6 +360,45 @@
           <button type="submit" class="primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <div id="settings" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="modal-head">
+        <h2 id="settings-title">Settings</h2>
+        <button id="settings-close" type="button" class="icon" aria-label="Close settings"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+
+      <section class="settings-section stack-form" aria-labelledby="ai-title">
+        <h3 id="ai-title"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> AI settings</h3>
+        <p class="form-hint">Meeting minutes use Groq's free API with your own key. The key is saved in this browser only: never in your account, never in the site.</p>
+        <label>Groq API key
+          <input type="password" id="groq-key" autocomplete="off" spellcheck="false" placeholder="gsk_…">
+        </label>
+        <p id="groq-key-state" class="form-hint"></p>
+        <label>Model
+          <select id="groq-model"></select>
+        </label>
+        <div class="settings-actions">
+          <button id="groq-save" type="button" class="primary">Save</button>
+          <button id="groq-test" type="button" class="ghost">Test key</button>
+          <button id="groq-remove" type="button" class="ghost danger-text">Remove key</button>
+        </div>
+        <p id="groq-status" class="settings-status" role="status" aria-live="polite"></p>
+        <p class="form-hint">No key yet? Create one for free at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com</a>.</p>
+      </section>
+
+      <section class="settings-section stack-form" aria-labelledby="data-title">
+        <h3 id="data-title"><i class="fa-solid fa-database" aria-hidden="true"></i> Data</h3>
+        <p class="form-hint">Deletes every reminder and every set of minutes: in your account when signed in, or in this browser. The History log is kept. This cannot be undone.</p>
+        <label>Type CLEAR to confirm
+          <input type="text" id="clear-confirm" autocomplete="off" spellcheck="false" placeholder="CLEAR">
+        </label>
+        <button id="clear-all" type="button" class="danger-btn" disabled><i class="fa-solid fa-trash" aria-hidden="true"></i> Clear all data</button>
+        <p id="clear-status" class="settings-status" role="status" aria-live="polite"></p>
+      </section>
     </div>
   </div>
 

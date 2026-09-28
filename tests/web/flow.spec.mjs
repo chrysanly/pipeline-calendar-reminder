@@ -87,7 +87,7 @@ test('the close button and Escape both close the panel', async ({ page }) => {
   await expect(page.locator('#panel')).toBeHidden();
 });
 
-test('month cells show at most 3 chips then "+N more", which opens day view', async ({ page }) => {
+test('month cells show at most 3 chips then "+N more", which lists the whole day in the sheet', async ({ page }) => {
   for (const [i, time] of ['08:00', '09:00', '10:00', '11:00', '12:00'].entries()) {
     await createEvent(page, { title: `Call ${i + 1}`, time });
   }
@@ -96,9 +96,21 @@ test('month cells show at most 3 chips then "+N more", which opens day view', as
   await expect(cell.locator('.more')).toHaveText('+2 more');
 
   await cell.locator('.more').click();
-  await expect(page.locator('#view-day')).toHaveClass(/is-active/);
-  await expect(page.locator('#grid .day')).toHaveCount(1);
-  await expect(page.locator('#grid .chip .chip-title')).toHaveText(['Call 1', 'Call 2', 'Call 3', 'Call 4', 'Call 5']);
+  // Still in month view; the sheet lists every reminder of that day.
+  await expect(page.locator('#view-month')).toHaveClass(/is-active/);
+  const panel = page.locator('#panel');
+  await expect(panel).toBeVisible();
+  await expect(page.locator('#day-label')).toContainText('5 reminders');
+  await expect(panel.locator('.day-list .chip-title')).toHaveText(['Call 1', 'Call 2', 'Call 3', 'Call 4', 'Call 5']);
+
+  // A reminder opens its details, with a way back to the day's list.
+  await panel.locator('.day-list .chip-title', { hasText: 'Call 4' }).click();
+  await expect(page.locator('#day-events .event-title')).toHaveText('Call 4');
+  await panel.locator('.back-to-day').click();
+  await expect(panel.locator('.day-list .chip')).toHaveCount(5);
+
+  await page.locator('#panel-close').click();
+  await expect(panel).toBeHidden();
 });
 
 test('Edit reopens the modal with the saved values and saves changes', async ({ page }) => {

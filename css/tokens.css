@@ -1,0 +1,176 @@
+/* CladFlo design tokens. Hello Kitty colours only (bow red, pink, white, nose
+   yellow, ink), never the character. Every other stylesheet reads these; no
+   raw colours outside this file. html[data-theme] is set by js/theme.js; the
+   media query is the fallback for when no theme attribute is present. */
+:root {
+  color-scheme: light;
+
+  /* Palette */
+  --bow: #e60039;
+  --bow-deep: #b8002e;
+  --pink: #ff6fa5;
+  --blush: #ffb6cc;
+  --white: #ffffff;
+  --nose: #ffd400;
+  --ink: #2b1b22;
+
+  /* Surfaces and text */
+  --bg: #fff5f8;
+  --bg-dot: rgba(230, 0, 57, .07);
+  --surface: #ffffff;
+  --surface-2: #fff0f5;
+  --surface-3: #ffe4ee;
+  --text: #2b1b22;
+  --muted: #7a4e60;
+  --border: #ffc9da;
+  --outline: #2b1b22;
+
+  /* Roles */
+  --primary: var(--bow);
+  --primary-hover: #cc0033;
+  --on-primary: #ffffff;
+  --secondary: var(--blush);
+  --secondary-hover: #ffa3bf;
+  --on-secondary: #2b1b22;
+  --accent: var(--pink);
+  --accent-soft: #ffe4ee;
+  --accent-ink: #d10036;
+  --on-accent: #2b1b22;
+  --danger: #c4002f;
+  --on-danger: #ffffff;
+  --today: var(--bow);
+  --on-today: #ffffff;
+  --yellow: var(--nose);
+  --focus: #e60039;
+  --backdrop: rgba(43, 27, 34, .5);
+
+  /* Client status: lead yellow, potential pink, active bow red, inactive grey. */
+  --st-lead: #ffd400;
+  --st-lead-ink: #5c4a00;
+  --st-potential: #ff6fa5;
+  --st-potential-ink: #9c1152;
+  --st-active: #e60039;
+  --st-active-ink: #a3002a;
+  --st-inactive: #9a8a93;
+  --st-inactive-ink: #5e5058;
+
+  /* Type */
+  --font: ui-rounded, "SF Pro Rounded", "Nunito", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 15px;
+  --fs-base: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --lh: 1.5;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-black: 800;
+
+  /* Spacing (4px steps) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* Shape: pills for actions, soft cards, small cells. */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --stroke: 2px;
+
+  /* Depth: a hard "sticker" shadow for things you press, a soft glow for panels. */
+  --shadow-press: 0 3px 0 var(--outline);
+  --shadow-press-sm: 0 2px 0 var(--outline);
+  --shadow: 0 10px 30px rgba(230, 0, 57, .12), 0 2px 6px rgba(43, 27, 34, .06);
+  --shadow-lg: 0 18px 48px rgba(230, 0, 57, .18), 0 4px 12px rgba(43, 27, 34, .1);
+  --ring: 0 0 0 2px var(--bg), 0 0 0 5px var(--focus);
+
+  /* Sizes and motion */
+  --tap: 44px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --dur: .16s;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1a1016;
+  --bg-dot: rgba(255, 111, 165, .06);
+  --surface: #251820;
+  --surface-2: #2f1f29;
+  --surface-3: #3b2633;
+  --text: #fdeef4;
+  --muted: #d2a9ba;
+  --border: #4a2e3c;
+  --outline: #0d0609;
+  --primary-hover: #ff1a50;
+  --secondary: #5a2b40;
+  --secondary-hover: #6d3450;
+  --on-secondary: #fdeef4;
+  --accent: #ff8fbf;
+  --accent-soft: #4a2640;
+  --accent-ink: #ff7a96;
+  --on-accent: #2a0a1a;
+  --danger: #ff4d6d;
+  --on-danger: #1a1016;
+  --focus: #ffd400;
+  --backdrop: rgba(0, 0, 0, .6);
+  --st-lead: #ffe066;
+  --st-lead-ink: #ffe066;
+  --st-potential: #ff8fbf;
+  --st-potential-ink: #ff9cc6;
+  --st-active: #ff4d6d;
+  --st-active-ink: #ff8599;
+  --st-inactive: #9a8a93;
+  --st-inactive-ink: #c9b8c2;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, .6);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #1a1016;
+    --bg-dot: rgba(255, 111, 165, .06);
+    --surface: #251820;
+    --surface-2: #2f1f29;
+    --surface-3: #3b2633;
+    --text: #fdeef4;
+    --muted: #d2a9ba;
+    --border: #4a2e3c;
+    --outline: #0d0609;
+    --primary-hover: #ff1a50;
+    --secondary: #5a2b40;
+    --secondary-hover: #6d3450;
+    --on-secondary: #fdeef4;
+    --accent: #ff8fbf;
+    --accent-soft: #4a2640;
+    --accent-ink: #ff7a96;
+    --on-accent: #2a0a1a;
+    --danger: #ff4d6d;
+    --on-danger: #1a1016;
+    --focus: #ffd400;
+    --backdrop: rgba(0, 0, 0, .6);
+    --st-lead: #ffe066;
+    --st-lead-ink: #ffe066;
+    --st-potential: #ff8fbf;
+    --st-potential-ink: #ff9cc6;
+    --st-active: #ff4d6d;
+    --st-active-ink: #ff8599;
+    --st-inactive: #9a8a93;
+    --st-inactive-ink: #c9b8c2;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    --shadow-lg: 0 18px 48px rgba(0, 0, 0, .6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur: 0s; }
+}

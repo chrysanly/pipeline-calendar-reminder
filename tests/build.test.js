@@ -44,7 +44,7 @@ test('build strips all import/export statements', () => {
 test('every element id the bundle queries exists in the emitted HTML', () => {
   const ids = new Set();
   for (const m of bundledJs.matchAll(/['"`]#([A-Za-z][\w-]*)['"`]/g)) {
-    // '#ff6fa5' is a colour (theme-color meta), not an element id.
+    // '#e60039' is a colour (theme-color meta), not an element id.
     if (!/^(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(m[1])) ids.add(m[1]);
   }
   assert(ids.size > 0, 'found no id selectors to check — the scan is broken');
@@ -82,16 +82,16 @@ function localRefs(html) {
 
 test('the built page has the SEO, social and manifest tags', () => {
   for (const needle of [
-    '<title>Pipeline — Client Reminders &amp; BD Calendar</title>',
+    '<title>CladFlo — Client Reminders &amp; BD Calendar</title>',
     '<meta name="description" content="Track client leads',
     '<meta name="robots" content="index,follow">',
     '<link rel="canonical" href="https://pipeline-9944d.web.app/">',
-    '<link rel="icon" href="assets/favicon.ico?v=2" sizes="any">',
-    '<link rel="icon" href="assets/logo.svg?v=2" type="image/svg+xml">',
-    '<link rel="icon" href="assets/favicon-32.png?v=2" type="image/png" sizes="32x32">',
-    '<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=2">',
+    '<link rel="icon" href="assets/favicon.ico?v=4" sizes="any">',
+    '<link rel="icon" href="assets/logo.svg?v=4" type="image/svg+xml">',
+    '<link rel="icon" href="assets/favicon-32.png?v=4" type="image/png" sizes="32x32">',
+    '<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4">',
     '<link rel="manifest" href="assets/manifest.webmanifest">',
-    '<meta name="apple-mobile-web-app-title" content="Pipeline">',
+    '<meta name="apple-mobile-web-app-title" content="CladFlo">',
     '<meta property="og:type" content="website">',
     '<meta property="og:title"',
     '<meta property="og:description"',
@@ -101,7 +101,7 @@ test('the built page has the SEO, social and manifest tags', () => {
     '<meta property="og:image:height" content="630">',
     '<meta name="twitter:card" content="summary_large_image">',
     '<meta name="twitter:image" content="https://pipeline-9944d.web.app/assets/og-image.png">',
-    '<meta name="theme-color" content="#ff6fa5">'
+    '<meta name="theme-color" content="#e60039">'
   ]) {
     assert(head.includes(needle), `missing from <head>: ${needle}`);
   }
@@ -114,7 +114,7 @@ test('the JSON-LD block is valid JSON describing the web app', () => {
   assert(m, 'no JSON-LD block');
   const data = JSON.parse(m[1]);
   assert(data['@type'] === 'WebApplication', data['@type']);
-  assert(data.name === 'Pipeline' && data.url === 'https://pipeline-9944d.web.app/', 'name/url');
+  assert(data.name === 'CladFlo' && data.url === 'https://pipeline-9944d.web.app/', 'name/url');
   assert(data.applicationCategory === 'BusinessApplication' && data.operatingSystem === 'Web', 'category/os');
   assert(data.offers && data.offers.price === '0', 'free offer');
   assert(data.image === 'https://pipeline-9944d.web.app/assets/og-image.png', data.image);
@@ -174,7 +174,7 @@ test('favicon.ico is a real icon file holding 16px and 32px PNGs', () => {
 
 test('the manifest parses and every icon it lists exists next to it', () => {
   const manifest = JSON.parse(readFileSync(join(dist, 'assets', 'manifest.webmanifest'), 'utf8'));
-  assert(manifest.name === 'Pipeline' && manifest.short_name === 'Pipeline', 'name');
+  assert(manifest.name === 'CladFlo' && manifest.short_name === 'CladFlo', 'name');
   assert(manifest.start_url === '/' && manifest.scope === '/' && manifest.display === 'standalone', 'start_url/scope/display');
   const icons = manifest.icons.map(i => `${i.sizes}${i.purpose ? `:${i.purpose}` : ''}`);
   for (const want of ['192x192', '512x512', '512x512:maskable']) assert(icons.includes(want), `no ${want} icon`);

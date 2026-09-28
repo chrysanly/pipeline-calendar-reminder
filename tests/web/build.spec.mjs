@@ -3,6 +3,7 @@
 // dist/index.html over file://, the way a user actually opens it.
 
 import { test, expect } from './fixtures.mjs';
+import { goToView } from './helpers.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -86,7 +87,7 @@ test('dist: saving a reminder closes the modal and renders it', async ({ page })
 });
 
 test('dist: view switch and theme toggle work in the bundle', async ({ page }) => {
-  await page.locator('#view-week').click();
+  await goToView(page, 'week');
   await expect(page.locator('#grid .day')).toHaveCount(7);
   const before = await page.locator('html').getAttribute('data-theme');
   await page.locator('#theme-toggle').click();
