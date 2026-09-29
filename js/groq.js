@@ -1,6 +1,8 @@
-// Groq chat completions for the meeting minutes. Each teammate uses their own
-// free Groq key, kept in this browser's localStorage only: it is never synced
-// to Firestore, never logged and never built into the site.
+// Groq chat completions for the meeting minutes. A teammate's own free Groq
+// key, kept in this browser's localStorage only (never synced to Firestore,
+// never logged, never built into the site), goes straight to Groq. Without
+// one, and with a Worker URL set, the minutes go through the CladFlo Worker
+// (POST /ai/chat), which holds the Groq key instead. An own key always wins.
 
 export const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 export const GROQ_KEY_STORAGE = 'cladflo.groq-key.v1';
@@ -104,6 +106,25 @@ async function groqFailure(response) {
   return new GroqError(`Groq error ${response.status}${detail ? `: ${detail}` : ''}`, response.status);
 }
 
+const defaultFetch = (...args) => globalThis.fetch(...args);
+
+/** POST, retrying a 429, a 5xx or a network failure up to `retries` times. */
+async function postWithRetry({ url, request, fetchFn, sleep, retries, unreachable, readReply, failure }) {
+  for (let attempt = 0; ; attempt++) {
+    let response;
+    try {
+      response = await fetchFn(url, request);
+    } catch (err) {
+      if (attempt >= retries) throw new GroqError(unreachable);
+      await sleep(retryDelay(attempt));
+      continue;
+    }
+    if (response.ok) return readReply(await response.json().catch(() => null));
+    if (!isRetryable(response.status) || attempt >= retries) throw await failure(response);
+    await sleep(retryDelay(attempt, response.headers && response.headers.get('retry-after')));
+  }
+}
+
 /**
  * One chat completion. Retries a 429, a 5xx or a network failure up to
  * MAX_RETRIES times. `fetch` and `sleep` are injectable for tests.
@@ -111,35 +132,89 @@ async function groqFailure(response) {
  */
 export async function chatGroq({
   key, model = DEFAULT_MODEL, messages, json = false, temperature = 0.2,
-  fetch: fetchFn = (...args) => globalThis.fetch(...args), sleep = groqWait, retries = MAX_RETRIES
+  fetch: fetchFn = defaultFetch, sleep = groqWait, retries = MAX_RETRIES
 }) {
   if (!key) throw new GroqError('Add your Groq API key in AI settings first.', 401);
   const body = { model, messages, temperature };
   if (json) body.response_format = { type: 'json_object' };
-  const request = {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body)
-  };
-
-  for (let attempt = 0; ; attempt++) {
-    let response;
-    try {
-      response = await fetchFn(GROQ_URL, request);
-    } catch (err) {
-      if (attempt >= retries) throw new GroqError('Could not reach Groq. Check your internet connection.');
-      await sleep(retryDelay(attempt));
-      continue;
-    }
-    if (response.ok) {
-      const data = await response.json();
+  return postWithRetry({
+    url: GROQ_URL,
+    request: {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body)
+    },
+    fetchFn,
+    sleep,
+    retries,
+    unreachable: 'Could not reach Groq. Check your internet connection.',
+    readReply(data) {
       const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
       if (typeof content !== 'string') throw new GroqError('Groq sent an empty reply.');
       return content;
-    }
-    if (!isRetryable(response.status) || attempt >= retries) throw await groqFailure(response);
-    await sleep(retryDelay(attempt, response.headers && response.headers.get('retry-after')));
+    },
+    failure: groqFailure
+  });
+}
+
+// ---------- through the CladFlo Worker ----------
+
+async function workerFailure(response) {
+  let reason = '';
+  try {
+    const body = await response.json();
+    reason = (body && body.error) || '';
+  } catch (err) {
+    reason = '';
   }
+  if (response.status === 401) return new GroqError(reason || 'Sign in again to use the CladFlo Worker.', 401);
+  if (response.status === 403) return new GroqError(reason || 'The CladFlo Worker did not allow this.', 403);
+  if (response.status === 429) return new GroqError(reason || 'The CladFlo Worker is busy. Try again in a minute.', 429);
+  return new GroqError(`CladFlo Worker error ${response.status}${reason ? `: ${reason}` : ''}`, response.status);
+}
+
+/**
+ * One chat completion through the Worker's POST /ai/chat, with the same
+ * retries as chatGroq. auth: { idToken } signed in, or { appToken } in local mode.
+ * @returns {Promise<string>} the reply text
+ */
+export async function chatWorker({
+  workerUrl, auth = {}, model = DEFAULT_MODEL, messages, json = false,
+  fetch: fetchFn = defaultFetch, sleep = groqWait, retries = MAX_RETRIES
+}) {
+  const base = String(workerUrl || '').trim().replace(/\/+$/, '');
+  if (!base) throw new GroqError('Set the Worker URL in Settings → Business first.');
+  const headers = { 'Content-Type': 'application/json' };
+  if (auth.idToken) headers.Authorization = `Bearer ${auth.idToken}`;
+  else if (auth.appToken) headers['X-App-Token'] = auth.appToken;
+  else throw new GroqError('Sign in to use the CladFlo Worker, or add your own Groq key in AI settings.', 401);
+  return postWithRetry({
+    url: `${base}/ai/chat`,
+    request: { method: 'POST', headers, body: JSON.stringify({ model, messages, json }) },
+    fetchFn,
+    sleep,
+    retries,
+    unreachable: 'Could not reach the CladFlo Worker. Check the Worker URL and your connection.',
+    readReply(data) {
+      if (!data || typeof data.content !== 'string') throw new GroqError('The CladFlo Worker sent an empty reply.');
+      return data.content;
+    },
+    failure: workerFailure
+  });
+}
+
+/** Who writes the minutes: 'key' (own Groq key, wins), 'worker' (Worker URL set) or '' (neither). */
+export function minutesSource({ key, workerUrl }) {
+  if (String(key || '').trim()) return 'key';
+  return String(workerUrl || '').trim() ? 'worker' : '';
+}
+
+/** The chat(messages, {json}) that generateMinutes calls, for the source above. */
+export function minutesChat({ key, workerUrl, auth, model = DEFAULT_MODEL, ...deps }) {
+  const source = minutesSource({ key, workerUrl });
+  return (messages, { json = false } = {}) => (source === 'key'
+    ? chatGroq({ key, model, messages, json, ...deps })
+    : chatWorker({ workerUrl, auth, model, messages, json, ...deps }));
 }
 
 /** A tiny request that proves the key works. */

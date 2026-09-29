@@ -27,7 +27,8 @@
     import './phone-location.test.js';
     import './dashboard.test.js';
     import './ui-pure.test.js';
-    import './importer.test.js';
+    import { importerTestsDone } from './importer.test.js';
+    import { fileStoreTestsDone } from './file-store.test.js';
     import { cloudTestsDone } from './cloud.test.js';
     import './transcript.test.js';
     import { recordsTestsDone } from './records.test.js';
@@ -39,9 +40,11 @@
     import './deals.test.js';
     import './timeline.test.js';
     import './timetrack.test.js';
+    import './pickers.test.js';
+    import { chatTestsDone } from './chat.test.js';
     import { aiTestsDone } from './ai.test.js';
     import { report } from './runner.js';
-    await Promise.all([cloudTestsDone, recordsTestsDone, groqTestsDone, minutesTestsDone, storeTestsDone, aiTestsDone]);
+    await Promise.all([chatTestsDone, importerTestsDone, fileStoreTestsDone, cloudTestsDone, recordsTestsDone, groqTestsDone, minutesTestsDone, storeTestsDone, aiTestsDone]);
     report();
   </script>
 </body>

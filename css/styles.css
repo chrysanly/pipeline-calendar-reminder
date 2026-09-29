@@ -271,7 +271,8 @@ body[data-auth="signed-out"] .layout { display: none; }
 
 .modal-card {
   position: relative;
-  width: min(480px, 100%);
+  /* Medium: the reminder form, Follow up, Clear calendar. */
+  width: min(640px, 100%);
   max-height: calc(100vh - 48px);
   max-height: calc(100dvh - 48px);
   overflow: auto;
@@ -288,6 +289,21 @@ body[data-auth="signed-out"] .layout { display: none; }
 .modal-head h2 { margin: 0; font-size: var(--fs-xl); font-weight: var(--fw-black); letter-spacing: -.01em; }
 
 #event-form { display: grid; gap: var(--sp-4); }
+/* The reminder form: two columns; Location, notes and the buttons across. Dense
+   packing keeps Time next to Date while the date picker's calendar opens below. */
+.event-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row dense; column-gap: var(--sp-3); }
+.event-grid .span-2, .event-grid .dp-popup { grid-column: 1 / -1; }
+.event-grid .form-hint { margin-top: calc(-1 * var(--sp-2)); }
+/* Save and Cancel stay in view while the form scrolls inside the card. */
+.modal-card .modal-actions {
+  position: sticky; bottom: calc(-1 * var(--sp-6)); z-index: 1;
+  margin: 0 calc(-1 * var(--sp-6)) calc(-1 * var(--sp-6)); padding: var(--sp-3) var(--sp-6) var(--sp-4);
+  background: var(--surface); border-top: 1px solid var(--border);
+}
+@media (max-width: 640px) {
+  .event-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
 

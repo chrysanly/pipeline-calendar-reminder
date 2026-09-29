@@ -97,11 +97,14 @@ test('an exported .xlsx imports back as the same reminders, notes and all', () =
   assert(acme.endsWith('BD Notes:\nReminder: 2026-10-05 14:30\nRenewal call\nDiscuss renewal, "gold" plan, 3 seats'), acme);
 });
 
-test('importing the export over the same data a second time adds nothing', () => {
+test('the export imported again adds duplicates; Re-import of it updates in place', () => {
   const bytes = new Uint8Array(toXlsx(XLSX, exportRows(EVENTS, DEALS)));
   const once = mergeImported([], importWorkbook(XLSX, bytes, OPTS).events).events;
-  const again = mergeImported(once, importWorkbook(XLSX, bytes, OPTS).events);
+  const again = mergeImported(once, importWorkbook(XLSX, bytes, OPTS).events, { reimport: true });
   assertEqual(again.added, 0);
   assertEqual(again.updated, 3);
   assertEqual(again.events.length, 3);
+  const copies = mergeImported(once, importWorkbook(XLSX, bytes, OPTS).events);
+  assertEqual(copies.duplicates, 3);
+  assertEqual(copies.events.length, 6);
 });

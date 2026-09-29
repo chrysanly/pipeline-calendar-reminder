@@ -243,47 +243,128 @@ export function rowsToEvents(rows, { selectedKey, now = new Date() }) {
   return { events, skipped, warnings };
 }
 
-/**
- * Add imported reminders, updating (not duplicating) ones with the same importKey.
- * @returns {{events: object[], added: number, updated: number}}
- */
 const LOCATION_FIELDS = ['phone', 'location', 'city', 'country'];
 
-export function mergeImported(existing, imported) {
-  let events = existing;
-  let added = 0;
-  let updated = 0;
-  for (const { dateFound, timeFound, statusFound, locFromPhone, ...data } of imported) {
-    // What we already know about this client wins over the file: a status set
-    // by hand is kept, and the file only fills location fields that are blank.
-    const known = latestForClient(events, data.clientName);
-    if (known) {
-      // 'lead' is only the default, so a Status column may still move it on.
-      const fileUpgradesDefault = statusFound && known.status === 'lead';
-      if (!fileUpgradesDefault) data.status = known.status;
-      for (const field of LOCATION_FIELDS) data[field] = known[field] || data[field];
-    }
+/**
+ * What one merge (all its chunks) remembers: how often each importKey came up
+ * in this file so far, the companies seen so far, and every importKey in use.
+ * `existing` is the data before the file, so an upload knows who is already there.
+ */
+export function createMergeContext(existing, { reimport = false } = {}) {
+  return {
+    reimport,
+    occurrences: new Map(),
+    seen: new Set(reimport ? [] : existing.map(e => clientKey(e.clientName)).filter(Boolean)),
+    keys: new Set(existing.map(e => e.importKey).filter(Boolean))
+  };
+}
 
-    const match = events.find(e => e.importKey && e.importKey === data.importKey);
-    if (match) {
-      events = updateEvent(events, match.id, {
-        ...data,
-        // A guessed date or time (selected day / import time) must not drift
-        // on every re-import.
-        date: dateFound ? data.date : match.date,
-        time: timeFound ? data.time : match.time,
-        notified: match.notified || data.notified
-      });
-      updated++;
-    } else {
-      events = addEvent(events, data);
-      added++;
-    }
-    // Status and filled-in blanks belong to the whole client, not just this reminder.
-    const shared = Object.fromEntries(LOCATION_FIELDS.filter(f => data[f]).map(f => [f, data[f]]));
-    events = applyClientFields(events, data.clientName, { status: data.status, ...shared }, data.updatedAt);
+/** `base`, else base#1, base#2… : the first one no reminder has yet. */
+function freeImportKey(keys, base) {
+  if (!keys.has(base)) return base;
+  let n = 1;
+  while (keys.has(`${base}#${n}`)) n++;
+  return `${base}#${n}`;
+}
+
+/**
+ * Merge one imported row into `events`. Every row of the file becomes its own
+ * reminder: nothing is merged away. A row whose company is already there
+ * (earlier in the file, or in the data before an upload) is marked `duplicate`.
+ * Re-import (History) updates the reminders it made before, row for row: the
+ * nth row with an importKey updates the nth copy (key, key#1, key#2…).
+ * New reminders start off the calendar: imports are raw data for Home.
+ * @returns {{events: object[], kind: 'added' | 'duplicate' | 'updated'}}
+ */
+function mergeRow(events, { dateFound, timeFound, statusFound, locFromPhone, ...data }, ctx) {
+  // What we already know about this client wins over the file: a status set
+  // by hand is kept, and the file only fills location fields that are blank.
+  const known = latestForClient(events, data.clientName);
+  if (known) {
+    // 'lead' is only the default, so a Status column may still move it on.
+    const fileUpgradesDefault = statusFound && known.status === 'lead';
+    if (!fileUpgradesDefault) data.status = known.status;
+    for (const field of LOCATION_FIELDS) data[field] = known[field] || data[field];
   }
-  return { events, added, updated };
+
+  const base = data.importKey;
+  const nth = ctx.occurrences.get(base) || 0;
+  ctx.occurrences.set(base, nth + 1);
+  const company = clientKey(data.clientName);
+  const duplicate = ctx.seen.has(company);
+  ctx.seen.add(company);
+
+  const target = nth ? `${base}#${nth}` : base;
+  const match = ctx.reimport ? events.find(e => e.importKey === target) : null;
+  let kind;
+  let next;
+  if (match) {
+    kind = 'updated';
+    // The reminder keeps its place on or off the calendar.
+    next = updateEvent(events, match.id, {
+      ...data,
+      importKey: target,
+      duplicate,
+      // A guessed date or time (selected day / import time) must not drift
+      // on every re-import.
+      date: dateFound ? data.date : match.date,
+      time: timeFound ? data.time : match.time,
+      notified: match.notified || data.notified
+    });
+  } else {
+    kind = duplicate ? 'duplicate' : 'added';
+    const importKey = ctx.reimport && !ctx.keys.has(target) ? target : freeImportKey(ctx.keys, base);
+    ctx.keys.add(importKey);
+    next = addEvent(events, { ...data, importKey, duplicate, calendarHidden: true });
+  }
+  // Status and filled-in blanks belong to the whole client, not just this reminder.
+  const shared = Object.fromEntries(LOCATION_FIELDS.filter(f => data[f]).map(f => [f, data[f]]));
+  next = applyClientFields(next, data.clientName, { status: data.status, ...shared }, data.updatedAt);
+  return { events: next, kind };
+}
+
+/**
+ * Add imported reminders, one per row. Rows of a company already there are
+ * added as duplicates; with `reimport` (History) the reminders made before are
+ * updated row for row. `context` carries on across chunks (mergeImportedAsync).
+ * @returns {{events: object[], added: number, duplicates: number, updated: number}}
+ */
+export function mergeImported(existing, imported, { reimport = false, context = createMergeContext(existing, { reimport }) } = {}) {
+  let events = existing;
+  const counts = { added: 0, duplicate: 0, updated: 0 };
+  for (const row of imported) {
+    const step = mergeRow(events, row, context);
+    events = step.events;
+    counts[step.kind]++;
+  }
+  return { events, added: counts.added, duplicates: counts.duplicate, updated: counts.updated };
+}
+
+/** Rows merged between two breaks, so a big file never freezes the page. */
+export const IMPORT_CHUNK = 50;
+
+const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
+
+/**
+ * mergeImported in chunks, giving the page a turn between them.
+ * onProgress(done, total) runs before the first chunk and after each one.
+ */
+export async function mergeImportedAsync(existing, imported, { chunkSize = IMPORT_CHUNK, onProgress = () => {}, pause = nextTick, reimport = false } = {}) {
+  const size = Math.max(1, Math.floor(chunkSize) || IMPORT_CHUNK);
+  const total = imported.length;
+  const context = createMergeContext(existing, { reimport });
+  const result = { events: existing, added: 0, duplicates: 0, updated: 0 };
+  onProgress(0, total);
+  for (let start = 0; start < total; start += size) {
+    if (start) await pause();
+    const merged = mergeImported(result.events, imported.slice(start, start + size), { reimport, context });
+    result.events = merged.events;
+    result.added += merged.added;
+    result.duplicates += merged.duplicates;
+    result.updated += merged.updated;
+    onProgress(Math.min(start + size, total), total);
+  }
+  return result;
 }
 
 /** The most recently saved reminder for a client, or null. */
@@ -321,13 +402,16 @@ export function importWorkbook(XLSX, data, options) {
 }
 
 /**
- * "Imported 3 reminders: 2 new, 1 duplicate (1 without a date → Sun, 27 September 2026, 1 skipped)".
- * `merged` is what mergeImported returned: a duplicate is a row whose reminder
- * already existed (or came earlier in the same file) and was updated, not added.
+ * "Imported 3 reminders: 2 new, 1 duplicate (added) (1 without a date → Sun, 27 September 2026, 1 skipped)".
+ * `merged` is what mergeImported returned: a duplicate is a row that was
+ * already there and was added again; Re-import updates rows instead.
  */
-export function importSummary({ events, skipped }, selectedLabel, { added, updated }) {
+export function importSummary({ events, skipped }, selectedLabel, { added, duplicates = 0, updated = 0 }) {
   const n = events.length;
   const undated = events.filter(e => !e.dateFound).length;
-  return `Imported ${n} reminder${n === 1 ? '' : 's'}: ${added} new, ${updated} duplicate${updated === 1 ? '' : 's'}`
+  const parts = [`${added} new`];
+  if (duplicates) parts.push(`${duplicates} duplicate${duplicates === 1 ? '' : 's'} (added)`);
+  if (updated) parts.push(`${updated} updated`);
+  return `Imported ${n} reminder${n === 1 ? '' : 's'}: ${parts.join(', ')}`
     + ` (${undated} without a date → ${selectedLabel}, ${skipped} skipped)`;
 }

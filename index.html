@@ -52,6 +52,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/pickers.css">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/nav.css">
   <link rel="stylesheet" href="css/dashboard.css">
@@ -73,7 +74,6 @@
     <nav class="views" aria-label="Main">
       <button id="view-dashboard" type="button" data-view="dashboard" title="Home (H)"><i class="fa-solid fa-house" aria-hidden="true"></i> <span class="btn-label">Home</span></button>
       <button id="view-calendar" type="button" data-view="calendar" title="Calendar (C)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Calendar</span></button>
-      <button id="view-minutes" type="button" data-view="minutes" title="Minutes (N)"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> <span class="btn-label">Minutes</span></button>
       <button id="view-history" type="button" data-view="history" title="History (L)"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> <span class="btn-label">History</span></button>
     </nav>
     <div class="topbar-actions">
@@ -121,11 +121,17 @@
       <div class="page-head">
         <div>
           <h2 class="page-title">Home</h2>
-          <p class="page-sub">Everyone you're following up with, by status and place.</p>
+          <p class="page-sub">Your potential and active clients, by status and place. Every client is on the Client tab.</p>
         </div>
-        <button id="import-btn" type="button" class="secondary" title="Import reminders from an Excel file"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> <span class="btn-label">Import Excel</span></button>
+        <div class="page-actions">
+          <button id="import-btn" type="button" class="secondary" title="Import reminders from an Excel file"><i class="fa-solid fa-file-excel" aria-hidden="true"></i> <span class="btn-label">Import Excel</span></button>
+        </div>
         <input type="file" id="import-file" accept=".xlsx,.xls,.csv" hidden>
       </div>
+      <section id="progress-chart" class="dash-card progress-chart" aria-labelledby="progress-title">
+        <h2 id="progress-title" class="dash-title"><i class="fa-solid fa-chart-column" aria-hidden="true"></i> Potential and Active progress</h2>
+        <div id="progress-bars" class="progress-bars" role="img"></div>
+      </section>
       <div id="status-cards" class="status-cards"></div>
       <div class="dash-body">
         <section class="dash-card dash-locations" aria-labelledby="locations-title">
@@ -138,12 +144,12 @@
             <div class="client-filters">
               <input type="search" id="client-search" class="client-search" placeholder="Search name, phone, city…" aria-label="Search clients" autocomplete="off">
               <select id="client-status-filter" class="client-status-filter" aria-label="Filter by status">
-                <option value="">All statuses</option>
-                <option value="lead">Lead</option>
+                <option value="">Potential and active</option>
                 <option value="potential">Potential</option>
                 <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
               </select>
+              <select id="client-country-filter" class="client-status-filter" aria-label="Filter by country"></select>
+              <select id="client-city-filter" class="client-status-filter" aria-label="Filter by city"></select>
             </div>
           </div>
           <div id="active-filters" class="active-filters"></div>
@@ -169,21 +175,22 @@
       </div>
     </section>
 
-    <!-- Meeting minutes from a transcript, with Groq. Filled by minutes-ui.js. -->
+    <!-- Meeting minutes from a transcript, with Groq. Filled by minutes-ui.js.
+         No navbar button: the client profile's Add minutes opens it. -->
     <section id="minutes" class="page minutes" aria-label="Meeting minutes" hidden>
+      <button id="minutes-back" type="button" class="ghost minutes-back"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> <span id="minutes-back-label">Back to the client</span></button>
       <div class="minutes-work">
         <section class="dash-card" aria-labelledby="minutes-title">
           <h2 id="minutes-title" class="dash-title"><i class="fa-solid fa-file-lines" aria-hidden="true"></i> Meeting minutes</h2>
           <form id="minutes-form" class="stack-form" novalidate>
             <div class="row">
               <label>Client
-                <input type="text" id="minutes-client" list="minutes-clients" placeholder="Acme Ltd." autocomplete="off">
+                <input type="text" id="minutes-client" placeholder="Acme Ltd." autocomplete="off">
               </label>
               <label>Date
                 <input type="date" id="minutes-date">
               </label>
             </div>
-            <datalist id="minutes-clients"></datalist>
             <label>Transcript
               <textarea id="minutes-transcript" rows="10" placeholder="Paste the meeting transcript here, or import a .txt, .md, .vtt or .srt file."></textarea>
             </label>
@@ -194,7 +201,7 @@
               <button id="minutes-generate" type="submit" class="primary"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Generate</button>
             </div>
             <p id="minutes-progress" class="minutes-progress" role="status" aria-live="polite"></p>
-            <button id="minutes-open-settings" type="button" class="ghost" hidden><i class="fa-solid fa-gear" aria-hidden="true"></i> Open AI settings</button>
+            <button id="minutes-open-settings" type="button" class="ghost" hidden><i class="fa-solid fa-gear" aria-hidden="true"></i> Open Settings</button>
           </form>
         </section>
 
@@ -241,8 +248,8 @@
         <div class="page-head">
           <h2 class="dash-title"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> History <span id="history-count" class="client-count"></span></h2>
           <div class="history-filters">
-            <select id="history-action" aria-label="Filter by action"></select>
-            <select id="history-client" aria-label="Filter by client"></select>
+            <select id="history-action" aria-label="Filter by action" data-picker></select>
+            <select id="history-client" aria-label="Filter by client" data-picker></select>
             <input type="search" id="history-search" class="client-search" placeholder="Search history…" aria-label="Search history" autocomplete="off">
           </div>
         </div>
@@ -263,6 +270,7 @@
           <button id="view-week" type="button" data-view="week" title="Week (W)"><i class="fa-solid fa-calendar-week" aria-hidden="true"></i> <span class="btn-label">Week</span></button>
           <button id="view-month" type="button" data-view="month" title="Month (M)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Month</span></button>
         </div>
+        <button id="clear-calendar-btn" type="button" class="ghost" title="Clear this day, week or month from the calendar; Home keeps the reminders"><i class="fa-solid fa-broom" aria-hidden="true"></i> <span class="btn-label">Clear calendar</span></button>
         <button id="add-event" type="button" class="primary" aria-label="New reminder"><i class="fa-solid fa-plus" aria-hidden="true"></i> <span class="btn-label">New reminder</span></button>
       </div>
       <div id="weekdays" class="weekdays"></div>
@@ -295,57 +303,49 @@
         <h2 id="modal-title">New reminder</h2>
         <button id="modal-close" type="button" class="icon" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </div>
-      <form id="event-form" novalidate>
+      <form id="event-form" class="event-grid" novalidate>
         <input type="hidden" name="id">
 
         <label>Title
           <input type="text" name="title" placeholder="Follow-up call" required>
         </label>
-
         <label>Client
           <input type="text" name="clientName" placeholder="Acme Ltd.">
         </label>
 
-        <div class="row">
-          <label>Status
-            <select name="status">
-              <option value="lead" selected>Lead</option>
-              <option value="potential">Potential</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </label>
-          <label>Phone
-            <input type="tel" name="phone" placeholder="+971 4 123 4567" autocomplete="off">
-          </label>
-        </div>
-
-        <label>Location
-          <input type="text" name="location" placeholder="Area or address, e.g. JLT Cluster X">
+        <label>Status
+          <select name="status" data-picker="status">
+            <option value="lead" selected>Lead</option>
+            <option value="potential">Potential</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </label>
+        <label>Phone
+          <input type="tel" name="phone" placeholder="+971 4 123 4567" autocomplete="off">
         </label>
 
-        <div class="row">
-          <label>City
-            <input type="text" name="city" placeholder="Dubai">
-          </label>
-          <label>Country
-            <input type="text" name="country" list="country-list" placeholder="United Arab Emirates">
-          </label>
-        </div>
+        <label class="span-2">Location
+          <input type="text" name="location" placeholder="Area or address, e.g. JLT Cluster X">
+        </label>
+        <label>City
+          <input type="text" name="city" placeholder="Dubai">
+        </label>
+        <label>Country
+          <input type="text" name="country" list="country-list" placeholder="United Arab Emirates">
+        </label>
         <datalist id="country-list"></datalist>
-        <p class="form-hint">Status and location apply to all of this client's reminders.</p>
+        <p class="form-hint span-2">Status and location apply to all of this client's reminders.</p>
 
-        <div class="row">
-          <label>Date
-            <input type="date" name="date" required>
-          </label>
-          <label>Time
-            <input type="time" name="time">
-          </label>
-        </div>
+        <label>Date
+          <input type="date" name="date" required>
+        </label>
+        <label>Time
+          <input type="time" name="time">
+        </label>
 
         <label>Remind me
-          <select name="reminderMinutesBefore">
+          <select name="reminderMinutesBefore" data-picker>
             <option value="0">At start time</option>
             <option value="5">5 minutes before</option>
             <option value="15" selected>15 minutes before</option>
@@ -355,13 +355,13 @@
           </select>
         </label>
 
-        <label>Notes
+        <label class="span-2">Notes
           <textarea name="notes" rows="4" placeholder="Discuss renewal terms…"></textarea>
         </label>
 
-        <p id="form-error" class="form-error" role="alert"></p>
+        <p id="form-error" class="form-error span-2" role="alert"></p>
 
-        <div class="modal-actions">
+        <div class="modal-actions span-2">
           <button id="modal-cancel" type="button" class="ghost">Cancel</button>
           <button type="submit" class="primary">Save</button>
         </div>
@@ -377,24 +377,6 @@
         <button id="settings-close" type="button" class="icon" aria-label="Close settings"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
       </div>
 
-      <section class="settings-section stack-form" aria-labelledby="ai-title">
-        <h3 id="ai-title"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> AI settings</h3>
-        <p class="form-hint">Meeting minutes use Groq's free API with your own key. The key is saved in this browser only: never in your account, never in the site.</p>
-        <label>Groq API key
-          <input type="password" id="groq-key" autocomplete="off" spellcheck="false" placeholder="gsk_…">
-        </label>
-        <p id="groq-key-state" class="form-hint"></p>
-        <label>Model
-          <select id="groq-model"></select>
-        </label>
-        <div class="settings-actions">
-          <button id="groq-save" type="button" class="primary">Save</button>
-          <button id="groq-test" type="button" class="ghost">Test key</button>
-          <button id="groq-remove" type="button" class="ghost danger-text">Remove key</button>
-        </div>
-        <p id="groq-status" class="settings-status" role="status" aria-live="polite"></p>
-        <p class="form-hint">No key yet? Create one for free at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com</a>.</p>
-      </section>
 
       <!-- Filled and saved by js/views/settings.js (users/{uid}/settings/app). -->
       <form id="business-form" class="settings-section stack-form" aria-labelledby="business-title" novalidate>
@@ -435,13 +417,33 @@
 
       <section class="settings-section stack-form" aria-labelledby="data-title">
         <h3 id="data-title"><i class="fa-solid fa-database" aria-hidden="true"></i> Data</h3>
-        <p class="form-hint">Deletes every reminder and every set of minutes: in your account when signed in, or in this browser. The History log is kept. This cannot be undone.</p>
+        <p class="form-hint">Deletes every reminder and every set of minutes: in your account when signed in, or in this browser. The History log and the imported files (for Re-import) are kept. This cannot be undone.</p>
         <label>Type CLEAR to confirm
           <input type="text" id="clear-confirm" autocomplete="off" spellcheck="false" placeholder="CLEAR">
         </label>
         <button id="clear-all" type="button" class="danger-btn" disabled><i class="fa-solid fa-trash" aria-hidden="true"></i> Clear all data</button>
         <p id="clear-status" class="settings-status" role="status" aria-live="polite"></p>
       </section>
+    </div>
+  </div>
+
+  <!-- Clear calendar (js/clear-calendar-ui.js): hides reminders from the calendar only. -->
+  <div id="clear-calendar" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="clear-calendar-title">
+      <div class="modal-head">
+        <h2 id="clear-calendar-title">Clear calendar</h2>
+        <button id="clear-calendar-close" type="button" class="icon" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+      </div>
+      <form id="clear-calendar-form" novalidate>
+        <p id="clear-calendar-count" class="clear-calendar-count" role="status"></p>
+        <p id="clear-calendar-warning" class="clear-calendar-warning"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> <span id="clear-calendar-warning-text"></span></p>
+        <p id="clear-calendar-error" class="form-error" role="alert"></p>
+        <div class="modal-actions">
+          <button id="clear-calendar-cancel" type="button" class="ghost">Cancel</button>
+          <button id="clear-calendar-submit" type="submit" class="danger-btn"><i class="fa-solid fa-broom" aria-hidden="true"></i> Clear calendar</button>
+        </div>
+      </form>
     </div>
   </div>
 

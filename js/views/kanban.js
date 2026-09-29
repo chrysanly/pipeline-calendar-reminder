@@ -1,14 +1,42 @@
 // Board page: every client as a card in its status column. Drag a card to
 // another column (or pick its Stage) to move the client; set a deal value per
-// client; export everything as CSV or Excel. Also puts the stage totals and
-// forecast on Home. Logic lives in deals.js and exporter.js.
+// client; filter the cards (search, status, country, city, remembered per
+// browser); export everything as CSV or Excel. Logic lives in deals.js,
+// dashboard.js and exporter.js.
 
 import { STATUSES, STATUS_LABELS, applyClientFields } from '../storage.js';
 import { CURRENCIES } from '../store.js';
 import { boardColumns, stageTotals, formatMoney, formatTotals, validateDeal, dealRecord } from '../deals.js';
 import { exportRows, toCsv, toXlsx, exportFileName } from '../exporter.js';
 import { loadXlsx } from '../xlsx-loader.js';
-import { $, el, icon, withBusy, STATUS_ICONS } from '../ui.js';
+import { el, icon, withBusy, STATUS_ICONS } from '../ui.js';
+import { filterBoard, parseBoardFilters, hasBoardFilters, locationTree, EMPTY_BOARD_FILTERS } from '../dashboard.js';
+import { enhanceSelect, refreshSelect } from '../select.js';
+import { markSelectMenu } from '../select-menu.js';
+
+const BOARD_FILTER_KEY = 'cladflo.board-filters.v1';
+// The Board's filters, kept across renders and reloads (this browser only).
+let boardFilters = readBoardFilters();
+// The filter bar's fixed parts, built once so typing survives re-renders.
+let filterBar = null;
+
+function readBoardFilters() {
+  try {
+    return parseBoardFilters(localStorage.getItem(BOARD_FILTER_KEY));
+  } catch {
+    return { ...EMPTY_BOARD_FILTERS };
+  }
+}
+
+function setBoardFilters(app, patch) {
+  boardFilters = { ...boardFilters, ...patch };
+  try {
+    localStorage.setItem(BOARD_FILTER_KEY, JSON.stringify(boardFilters));
+  } catch {
+    // Private mode or full storage: the filters last for this visit only.
+  }
+  app.render();
+}
 
 // The one card whose value form is open, and what has been typed so far, so a
 // re-render (a snapshot from another device) does not lose it.
@@ -121,7 +149,7 @@ function dealForm(app, card) {
 // ---------- the board ----------
 
 function stageSelect(app, card) {
-  const select = el('select', 'card-stage');
+  const select = markSelectMenu(el('select', `card-stage status-${card.status}`), 'status');
   select.setAttribute('aria-label', `Stage for ${card.name}`);
   for (const status of STATUSES) {
     const option = el('option', '', STATUS_LABELS[status]);
@@ -167,7 +195,7 @@ function boardColumn(app, status, cards, stage) {
   head.append(title, el('p', 'board-col-total', formatTotals(stage.totals) || '—'));
   const list = el('ul', 'board-cards');
   for (const card of cards) list.appendChild(boardCard(app, card));
-  if (!cards.length) list.appendChild(el('li', 'board-empty', 'Drop a client here'));
+  if (!cards.length) list.appendChild(el('li', 'board-empty', hasBoardFilters(boardFilters) ? 'No clients match the filters' : 'Drop a client here'));
   column.append(head, list);
   return column;
 }
@@ -179,7 +207,10 @@ function renderBoard(app, section) {
     board.appendChild(el('p', 'board-loading', 'Loading…'));
     return;
   }
-  const columns = boardData(app);
+  const all = boardData(app);
+  renderBoardFilters(all);
+  const { columns, shown, total } = filterBoard(all, boardFilters);
+  filterBar.count.textContent = hasBoardFilters(boardFilters) ? `${shown} of ${total} clients` : `${total} client${total === 1 ? '' : 's'}`;
   const { stages, forecast } = stageTotals(columns);
   if (boardEdit.key && !STATUSES.some(s => columns[s].some(c => c.key === boardEdit.key))) boardEdit.key = null;
   for (const status of STATUSES) board.appendChild(boardColumn(app, status, columns[status], stages[status]));
@@ -220,6 +251,72 @@ function bindDrag(app, board) {
     dragged = null;
     moveClient(app, key, column.dataset.status);
   });
+}
+
+// ---------- filters ----------
+
+function filterSelect(id, label) {
+  const select = el('select', 'board-filter-select');
+  select.id = id;
+  select.setAttribute('aria-label', label);
+  return select;
+}
+
+function fillFilterSelect(select, allLabel, options, value) {
+  select.innerHTML = '';
+  for (const [optionValue, text] of [['', allLabel], ...options]) {
+    const option = el('option', '', text);
+    option.value = optionValue;
+    select.appendChild(option);
+  }
+  select.value = options.some(([v]) => v === value) ? value : '';
+  refreshSelect(select);
+}
+
+function buildBoardFilters(app) {
+  const bar = el('form', 'board-filters');
+  bar.setAttribute('role', 'search');
+  bar.setAttribute('aria-label', 'Filter the board');
+  bar.addEventListener('submit', e => e.preventDefault());
+  const search = el('input', 'client-search board-search');
+  search.type = 'search';
+  search.id = 'board-search';
+  search.placeholder = 'Search name, phone, city…';
+  search.setAttribute('aria-label', 'Search the board');
+  search.autocomplete = 'off';
+  search.value = boardFilters.search;
+  search.addEventListener('input', () => setBoardFilters(app, { search: search.value }));
+  const status = filterSelect('board-status-filter', 'Filter the board by status');
+  const country = filterSelect('board-country-filter', 'Filter the board by country');
+  const city = filterSelect('board-city-filter', 'Filter the board by city');
+  const clear = el('button', 'ghost board-clear');
+  clear.type = 'button';
+  clear.append(icon('fa-filter-circle-xmark'), ' ', el('span', 'btn-label', 'Clear filters'));
+  clear.addEventListener('click', () => {
+    search.value = '';
+    setBoardFilters(app, { ...EMPTY_BOARD_FILTERS });
+  });
+  const count = el('p', 'board-filter-count');
+  count.setAttribute('aria-live', 'polite');
+  bar.append(search, status, country, city, clear, count);
+  status.addEventListener('change', () => setBoardFilters(app, { status: status.value || null }));
+  country.addEventListener('change', () => setBoardFilters(app, { country: country.value || null, city: null }));
+  city.addEventListener('change', () => setBoardFilters(app, { city: city.value || null }));
+  filterBar = { bar, search, status, country, city, clear, count };
+  return bar;
+}
+
+/** The choices come from every card, so a filter never hides its own options. */
+function renderBoardFilters(columns) {
+  const cards = STATUSES.flatMap(s => columns[s]);
+  const tree = locationTree(cards);
+  fillFilterSelect(filterBar.status, 'All statuses', STATUSES.map(s => [s, STATUS_LABELS[s]]), boardFilters.status);
+  fillFilterSelect(filterBar.country, 'All countries', tree.map(c => [c.name, c.name]), boardFilters.country);
+  const places = boardFilters.country ? tree.filter(c => c.name === boardFilters.country) : tree;
+  const cities = [...new Set(places.flatMap(c => c.cities.map(x => x.name)))].sort((a, b) => a.localeCompare(b));
+  fillFilterSelect(filterBar.city, 'All cities', cities.map(name => [name, name]), boardFilters.city);
+  if (document.activeElement !== filterBar.search) filterBar.search.value = boardFilters.search;
+  filterBar.clear.disabled = !hasBoardFilters(boardFilters);
 }
 
 // ---------- export ----------
@@ -269,36 +366,11 @@ function buildBoardPage(app, section) {
   const actions = el('div', 'board-export');
   actions.append(exportButton(app, 'csv', 'fa-file-csv', 'CSV'), exportButton(app, 'xlsx', 'fa-file-excel', 'Excel'));
   head.append(text, actions);
+  const filters = buildBoardFilters(app);
   const board = el('div', 'board');
-  section.append(head, board);
+  section.append(head, filters, board);
+  for (const select of [filterBar.status, filterBar.country, filterBar.city]) enhanceSelect(select);
   bindDrag(app, board);
-}
-
-// ---------- stage totals on Home ----------
-
-function renderStageTotals(app, box) {
-  const { stages, forecast } = stageTotals(boardData(app));
-  box.innerHTML = '';
-  box.hidden = Boolean(app.state.loading);
-  for (const status of STATUSES) {
-    const item = el('div', `stage-total status-${status}`);
-    item.append(el('span', 'stage-total-label', STATUS_LABELS[status]), el('strong', 'stage-total-value', formatTotals(stages[status].totals) || '—'));
-    box.appendChild(item);
-  }
-  const total = el('div', 'stage-total is-forecast');
-  total.append(el('span', 'stage-total-label', 'Forecast'), el('strong', 'stage-total-value', formatTotals(forecast) || '—'));
-  box.appendChild(total);
-}
-
-function mountStageTotals(app) {
-  const cards = $('#status-cards');
-  if (!cards) return;
-  const box = el('section', 'stage-totals');
-  box.id = 'stage-totals';
-  box.setAttribute('aria-label', 'Pipeline value by stage');
-  cards.after(box);
-  for (const name of ['events-change', 'store-change', 'auth']) app.hooks.on(name, () => renderStageTotals(app, box));
-  renderStageTotals(app, box);
 }
 
 /** Feature entry point (js/features.js). */
@@ -312,5 +384,4 @@ export function registerKanban(app) {
     bind: buildBoardPage,
     render: renderBoard
   });
-  mountStageTotals(app);
 }

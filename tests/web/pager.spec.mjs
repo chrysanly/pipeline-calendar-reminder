@@ -90,7 +90,9 @@ test('the status filter and search narrow the list and start again at page 1', a
   await page.locator('#page-next').click();
   await expect(page.locator('#page-label')).toHaveText('Page 2 of 5');
 
-  await page.locator('#client-status-filter').selectOption('active');
+  // The searchable status filter: typing highlights the best match, Enter picks it.
+  await page.locator('#client-status-filter-search').fill('active');
+  await page.keyboard.press('Enter');
   await expect(page.locator('#page-label')).toHaveText('Page 1 of 2');
   await expect(page.locator('#pager-info')).toHaveText('Showing 1–25 of 30');
   await expect(page.locator('#client-count')).toHaveText('(30 of 120)');
@@ -104,7 +106,8 @@ test('the status filter and search narrow the list and start again at page 1', a
   await expect(page.locator('#client-pager')).toBeVisible();
   await expect(page.locator('#page-label')).toHaveText('Page 1 of 1');
 
-  await page.locator('#client-status-filter').selectOption('');
+  await page.locator('#client-status-filter-search').click();
+  await page.locator('#dashboard .combo-option', { hasText: 'All statuses' }).click();
   await expect(rows(page)).toHaveCount(9);
 
   // A status card click updates the dropdown too.

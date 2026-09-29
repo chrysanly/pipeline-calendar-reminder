@@ -4,7 +4,7 @@
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openApp, fillForm } from './helpers.mjs';
+import { openApp, fillForm, waitForImport } from './helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const NOW = new Date(2026, 8, 27, 10, 0, 0);
@@ -66,7 +66,7 @@ test('create, edit, delete and status changes are logged newest first', async ({
 
 test('an Excel import is one History entry with the file name', async ({ page }) => {
   await page.locator('#import-file').setInputFiles(join(root, 'tests', 'fixtures', 'sample.xlsx'));
-  await expect(page.locator('#banner')).toBeVisible();
+  await waitForImport(page);
   await page.keyboard.press('l');
   await expect(entries(page)).toHaveCount(1);
   await expect(entries(page).first()).toHaveAttribute('data-action', 'import');

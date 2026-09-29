@@ -6,5 +6,8 @@ GROQ_API_KEY=gsk_your_key_here
 # Access token for local mode (no sign-in): any long random string; enter the
 # same value in the app's AI panel.
 APP_TOKEN=change-me-to-a-long-random-string
+# Signed-in accounts that may use the Worker: their verified Google emails,
+# comma separated, any number. Empty = nobody signed in gets in (403).
+ALLOWED_EMAILS=you@example.com,teammate@example.com
 # Optional, for /notify email alerts: https://resend.com/api-keys
 RESEND_API_KEY=re_your_key_here

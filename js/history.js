@@ -22,7 +22,7 @@ const entryText = value => (value === null || value === undefined ? '' : String(
 
 /** A stored entry, cleaned up. Unknown actions read as edits. */
 export function normalizeEntry(data) {
-  return {
+  const entry = {
     id: data.id || recordId('log'),
     at: entryText(data.at),
     action: HISTORY_ACTIONS.includes(data.action) ? data.action : 'edit',
@@ -31,15 +31,23 @@ export function normalizeEntry(data) {
     client: entryText(data.client),
     detail: entryText(data.detail)
   };
+  // Imports keep the file (js/file-store.js), so History can re-import it.
+  const fileId = entryText(data.fileId);
+  if (fileId) entry.fileId = fileId;
+  return entry;
 }
 
+/** An import entry whose file was kept, so it can be imported again. */
+export const canReimport = entry => entry.action === 'import' && Boolean(entry.fileId);
+
 /**
- * A new entry. kind: 'reminder' | 'client' | 'minutes' | 'data'.
+ * A new entry. kind: 'reminder' | 'client' | 'minutes' | 'data' | 'calendar'.
+ * fileId: the stored file of an import.
  * @throws on an unknown action, so a typo never logs silently.
  */
-export function logEntry({ action, kind, title, client, detail }, now = new Date()) {
+export function logEntry({ action, kind, title, client, detail, fileId }, now = new Date()) {
   if (!HISTORY_ACTIONS.includes(action)) throw new Error(`Unknown history action "${action}".`);
-  return normalizeEntry({ action, kind, title, client, detail, at: now.toISOString() });
+  return normalizeEntry({ action, kind, title, client, detail, fileId, at: now.toISOString() });
 }
 
 /** Newest first; the ISO timestamps sort as text. */

@@ -68,31 +68,8 @@
 .deal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
 .deal-actions button { min-height: var(--tap); }
 
-/* Home: value per stage and the weighted forecast, under the status cards. */
-.stage-totals {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--sp-2);
-  margin: var(--sp-3) 0;
-}
-.stage-totals[hidden] { display: none; }
-.stage-total {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--st, var(--accent));
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-.stage-total-label { font-size: var(--fs-xs); font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-.stage-total-value { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.stage-total.is-forecast { background: var(--accent-soft); }
-
 @media (max-width: 1100px) {
   .board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stage-totals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* Phones: swipe between columns, one and a bit in view. */
@@ -113,4 +90,20 @@
 
 @media (prefers-reduced-motion: reduce) {
   .board-col { transition: none; }
+}
+
+/* Filter bar above the board (kanban.js): search, status, country, city, Clear. */
+.board-filters {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2);
+  margin-bottom: var(--sp-4); padding: var(--sp-3);
+  background: var(--surface); border: var(--stroke) solid var(--border); border-radius: var(--radius-lg);
+}
+.board-filters .board-search { flex: 1 1 14rem; width: auto; }
+.board-filters .combo { flex: 0 1 11rem; }
+.board-filters .combo > input { border-radius: var(--radius-pill); }
+.board-filter-count { margin: 0 0 0 auto; font-size: var(--fs-sm); font-weight: var(--fw-bold); color: var(--muted); white-space: nowrap; }
+@media (max-width: 640px) {
+  .board-filters .combo, .board-filters .board-search { flex: 1 1 100%; }
+  .board-filters .board-clear { flex: 1 1 auto; }
+  .board-filter-count { margin: 0; }
 }

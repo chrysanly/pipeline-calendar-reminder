@@ -4,7 +4,9 @@
 
 /* ---------- status cards ---------- */
 
-.status-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-4); }
+.status-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-4); }
+/* Duplicates: the brand yellow, like the Duplicate badge. */
+.status-duplicate { --st: var(--yellow); --st-ink: var(--ink); }
 
 .status-card {
   display: grid;
@@ -41,7 +43,8 @@
   border-color: var(--outline);
   box-shadow: 0 3px 0 var(--outline);
 }
-.status-card:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--border); }
+/* Numbers only now (Home), so no press or hover effect. */
+.status-card { cursor: default; }
 
 /* ---------- body: locations + clients ---------- */
 
@@ -161,7 +164,7 @@
 .dash-empty { padding: var(--sp-6) var(--sp-2); font-size: var(--fs-md); text-align: center; }
 
 @media (hover: hover) {
-  .status-card:hover { border-color: var(--st); }
+
   .loc-tag:hover { background: var(--accent-soft); }
   .client-row:not(.client-head):hover { background: var(--surface-2); }
   .client-name:hover { color: var(--accent-ink); text-decoration: underline; }
@@ -177,6 +180,8 @@
 @media (max-width: 900px) {
   .status-card { padding: var(--sp-3); column-gap: 10px; }
   .status-card .status-icon { width: 38px; height: 38px; }
+  /* Five cards: three, then two, rather than squeezed into one row. */
+  .status-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* Clients as cards whenever the list itself is narrow: phones, tablets, and
@@ -210,6 +215,7 @@
 @media (max-width: 640px) {
   .dashboard { gap: var(--sp-3); }
   .status-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+  .status-cards .status-duplicate { grid-column: 1 / -1; }
   .status-card { min-height: 0; padding: var(--sp-3); column-gap: 10px; }
   .status-card .status-icon { width: 36px; height: 36px; font-size: var(--fs-md); }
   .status-count { font-size: var(--fs-xl); }

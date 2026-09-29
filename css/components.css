@@ -233,6 +233,33 @@
 
 :is(#event-form, .stack-form) :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--danger); }
 
+/* Every other text field, select and textarea (dialogs, feature pages, pickers)
+   gets the same look. :where() keeps this at zero specificity, so the styles
+   above and page-specific ones still win. */
+:where(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="color"], [type="hidden"]), select, textarea) {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 10px 14px;
+  font-family: var(--font);
+  font-size: var(--fs-base);
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--stroke) solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+:where(input, textarea)::placeholder { color: var(--muted); opacity: .75; }
+@media (hover: hover) {
+  :where(input:not([type="checkbox"], [type="radio"]), select, textarea):hover { border-color: var(--accent); }
+}
+:where(input:not([type="checkbox"], [type="radio"]), select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 28%, transparent);
+}
+
 .form-hint { margin: -4px 0 0; font-size: var(--fs-xs); color: var(--muted); }
 .form-error { margin: 0; min-height: 1em; font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--danger); }
 
@@ -362,6 +389,22 @@
 }
 .banner-text { flex: 1; display: grid; gap: 2px; min-width: 0; padding-top: 2px; }
 
+/* Busy toast (showProgress): the bell turns into a spinner, e.g. "Importing 50/200". */
+.banner.is-busy .banner-icon { position: relative; color: transparent; }
+.banner.is-busy .banner-icon::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid var(--ink);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin .7s linear infinite;
+}
+.banner.is-busy .banner-title { pointer-events: none; }
+
 .banner-title {
   padding: 0;
   font-size: var(--fs-base);
@@ -399,5 +442,50 @@
 
 @media (prefers-reduced-motion: reduce) {
   .banner { animation: none; }
-  .is-loading::after { animation-duration: 2s; }
+  .is-loading::after, .banner.is-busy .banner-icon::after { animation-duration: 2s; }
 }
+
+/* ---------- Home actions, Clear calendar, History Re-import ---------- */
+
+.page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+
+.clear-calendar-warning {
+  display: flex;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3);
+  font-size: var(--fs-md);
+  color: var(--text);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+}
+.clear-calendar-warning .fa-solid { margin-top: 3px; color: var(--primary); }
+
+.history-reimport { justify-self: start; margin-top: var(--sp-1); }
+
+/* ---------- Home: Potential vs Active progress chart (dashboard-ui.js) ---------- */
+.progress-chart { margin-bottom: var(--sp-4); }
+.progress-legend { display: flex; flex-wrap: wrap; gap: var(--sp-4); margin: var(--sp-2) 0 var(--sp-3); font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text); }
+.progress-key { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.progress-swatch { width: 14px; height: 14px; border-radius: var(--radius-sm); background: var(--st); border: 1px solid var(--st-ink); }
+.progress-months { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--sp-3); align-items: end; height: 160px; }
+.progress-month { display: flex; flex-direction: column; align-items: center; gap: var(--sp-1); height: 100%; }
+.progress-pair { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: var(--sp-1); border-bottom: 2px solid var(--border); }
+.progress-bar { position: relative; width: min(28px, 40%); height: var(--size, 0%); min-height: 2px; background: var(--st); border: 1px solid var(--st-ink); border-bottom: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; transition: height var(--dur) var(--ease); }
+.progress-bar::after { content: attr(data-count); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: var(--fs-xs); font-weight: var(--fw-bold); color: var(--text); }
+.progress-label { font-size: var(--fs-xs); color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .progress-bar { transition: none; } }
+
+/* ---------- Duplicate badge: a row an import added again ---------- */
+.client-who { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
+.dup-badge { display: inline-flex; align-items: center; gap: var(--sp-1); padding: 2px var(--sp-2); border-radius: var(--radius-pill); background: var(--yellow); color: var(--ink); border: 1px solid var(--ink); font-size: var(--fs-xs); font-weight: var(--fw-bold); white-space: nowrap; }
+.chip-dup { margin-left: var(--sp-1); padding: 0 var(--sp-1); }
+.progress-share { padding: 0 var(--sp-2); border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--border); font-size: var(--fs-xs); color: var(--muted); }
+.client-row.is-duplicate { background: color-mix(in srgb, var(--yellow) 10%, transparent); }
+.clear-calendar-count { margin: 0 0 var(--sp-3); font-size: var(--fs-md); font-weight: var(--fw-bold); color: var(--text); }
+/* Phone: Clear calendar gets its own row in the toolbar, with its label. */
+@media (max-width: 640px) {
+  .cal-toolbar #clear-calendar-btn { width: 100%; }
+  .cal-toolbar #clear-calendar-btn .btn-label { display: inline; }
+}
+

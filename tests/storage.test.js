@@ -1,7 +1,8 @@
-import { test, assertEqual, assertDeepEqual, fakeStorage } from './runner.js';
+import { test, assert, assertEqual, assertDeepEqual, fakeStorage } from './runner.js';
 import {
   STORAGE_KEY, loadEvents, saveEvents, addEvent, updateEvent,
-  deleteEvent, findEvent, groupByDate, normalizeEvent, applyClientFields, clientKey
+  deleteEvent, findEvent, groupByDate, normalizeEvent, applyClientFields, clientKey,
+  hideFromCalendar, calendarEvents, setClientOnCalendar, calendarCounts, countOnCalendar
 } from '../js/storage.js';
 
 const sample = {
@@ -141,4 +142,91 @@ test('applyClientFields writes only the given fields and skips reminders with no
   assertEqual(next[0].city, 'Dubai', 'unlisted fields kept');
   assertDeepEqual(applyClientFields(list, '', { status: 'active' }), list, 'blank client: nothing changes');
   assertDeepEqual(applyClientFields(list, 'Acme', {}), list, 'no fields: nothing changes');
+});
+
+// ---------- Clear calendar ----------
+
+const onDays = (...dates) => dates.map((date, i) => normalizeEvent({ id: `e${i}`, title: `T${i}`, date }));
+
+test('hideFromCalendar with no dates hides every dated reminder and counts them', () => {
+  const list = onDays('2026-10-01', '2026-10-15', '');
+  const { events, count } = hideFromCalendar(list, {}, 'T1');
+  assertEqual(count, 2);
+  assertDeepEqual(events.map(e => Boolean(e.calendarHidden)), [true, true, false]);
+  assertEqual(events[0].updatedAt, 'T1');
+  assertEqual(list[0].calendarHidden, undefined, 'the input is not mutated');
+});
+
+test('hideFromCalendar keeps to From and To, both inclusive, either one optional', () => {
+  const list = onDays('2026-09-30', '2026-10-01', '2026-10-31', '2026-11-01');
+  const hidden = range => hideFromCalendar(list, range).events.map(e => Boolean(e.calendarHidden));
+  assertDeepEqual(hidden({ from: '2026-10-01', to: '2026-10-31' }), [false, true, true, false]);
+  assertDeepEqual(hidden({ from: '2026-10-31' }), [false, false, true, true]);
+  assertDeepEqual(hidden({ to: '2026-10-01' }), [true, true, false, false]);
+});
+
+test('hideFromCalendar refuses From after To, and counts only newly hidden reminders', () => {
+  let message = '';
+  try { hideFromCalendar(onDays('2026-10-01'), { from: '2026-10-02', to: '2026-10-01' }); } catch (err) { message = err.message; }
+  assertEqual(message, '"From" must be on or before "To".');
+  const once = hideFromCalendar(onDays('2026-10-01', '2026-10-02'), { to: '2026-10-01' }).events;
+  const twice = hideFromCalendar(once, {});
+  assertEqual(twice.count, 1);
+  const none = hideFromCalendar(twice.events, {});
+  assertEqual(none.count, 0);
+  assertEqual(none.events, twice.events, 'nothing hidden: the same list comes back');
+});
+
+test('calendarEvents leaves out hidden reminders; normalizeEvent keeps the flag only when set', () => {
+  const { events } = hideFromCalendar(onDays('2026-10-01', '2026-11-01'), { to: '2026-10-31' });
+  assertDeepEqual(calendarEvents(events).map(e => e.id), ['e1']);
+  assertEqual(normalizeEvent({ ...events[0] }).calendarHidden, true);
+  assert(!('calendarHidden' in normalizeEvent({ ...events[0], calendarHidden: false })), 'false drops the key');
+  assertEqual(findEvent(events, 'e0').title, 'T0', 'hidden reminders are still in the data');
+});
+
+test('normalizeEvent keeps the duplicate mark of an imported row only', () => {
+  assertEqual(normalizeEvent({ title: 'x', importKey: 'acme|2026-10-01#1', duplicate: true }).duplicate, true);
+  assertEqual('duplicate' in normalizeEvent({ title: 'x', importKey: 'acme|2026-10-01' }), false);
+  assertEqual('duplicate' in normalizeEvent({ title: 'x', duplicate: true }), false, 'only imports can be duplicates');
+});
+
+const onCal = [
+  { id: 'a', clientName: 'Acme', title: 'A', date: '2026-10-01', time: '09:00', calendarHidden: true },
+  { id: 'b', clientName: ' acme ', title: 'B', date: '2026-10-02', time: '', calendarHidden: true },
+  { id: 'c', clientName: 'Acme', title: 'C', date: '2026-10-03', time: '10:00' },
+  { id: 'd', clientName: 'Falcon', title: 'D', date: '2026-10-01', time: '09:00', calendarHidden: true },
+  { id: 'e', clientName: 'Acme', title: 'Undated', date: '', time: '', calendarHidden: true }
+];
+
+test('setClientOnCalendar puts one client\'s dated reminders on the calendar, or takes them off', () => {
+  const on = setClientOnCalendar(onCal, 'ACME', true, 'T1');
+  assertEqual(on.count, 2);
+  assertDeepEqual(on.events.map(e => Boolean(e.calendarHidden)), [false, false, false, true, true]);
+  assertEqual(on.events[0].updatedAt, 'T1');
+  assertEqual(on.events[2], onCal[2], 'already on it: untouched');
+  const off = setClientOnCalendar(on.events, 'Acme', false, 'T2');
+  assertEqual(off.count, 3);
+  assertDeepEqual(off.events.map(e => Boolean(e.calendarHidden)), [true, true, true, true, true]);
+  const none = setClientOnCalendar(off.events, 'Acme', false);
+  assertEqual(none.count, 0);
+  assertEqual(none.events, off.events, 'nothing to change: the same list');
+  assertEqual(setClientOnCalendar(onCal, '  ', true).count, 0, 'no client name: nothing changes');
+});
+
+test('calendarCounts: a client\'s dated reminders on and off the calendar', () => {
+  assertDeepEqual(calendarCounts(onCal, 'acme'), { shown: 1, hidden: 2 });
+  assertDeepEqual(calendarCounts(onCal, 'Falcon'), { shown: 0, hidden: 1 });
+  assertDeepEqual(calendarCounts(onCal, 'Nobody'), { shown: 0, hidden: 0 });
+});
+
+test('countOnCalendar: the reminders still on the calendar in a period, both ends included', () => {
+  const list = [
+    { id: 'a', date: '2026-10-01' }, { id: 'b', date: '2026-10-03' }, { id: 'c', date: '2026-10-03', calendarHidden: true },
+    { id: 'd', date: '2026-10-04' }, { id: 'e', date: '' }
+  ];
+  assertEqual(countOnCalendar(list, { from: '2026-10-03', to: '2026-10-03' }), 1, 'a day');
+  assertEqual(countOnCalendar(list, { from: '2026-10-01', to: '2026-10-04' }), 3, 'the hidden and undated ones do not count');
+  assertEqual(countOnCalendar(list, { from: '2026-11-01', to: '2026-11-30' }), 0);
+  assertEqual(countOnCalendar([], { from: '2026-10-01', to: '2026-10-31' }), 0);
 });

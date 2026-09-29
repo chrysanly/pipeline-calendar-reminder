@@ -1,7 +1,7 @@
 import { test, assert, assertEqual, assertDeepEqual } from './runner.js';
 import {
   localStamp, clientTimeline, filterTimeline, timelineCounts, addNote, removeNote, NOTE_LIMIT,
-  parseDue, validateTask, taskRecord, taskState, clientTasks, newActionItems, pickableClients
+  parseDue, validateTask, taskRecord, taskState, clientTasks, newActionItems, pickableClients, followUpReminder
 } from '../js/timeline.js';
 
 // Local times, so the stamps read the same in any time zone.
@@ -71,7 +71,7 @@ test('filterTimeline and timelineCounts', () => {
   assertDeepEqual(timelineCounts(items), { reminder: 2, note: 1, minutes: 1, activity: 2, time: 1, expense: 1 });
 });
 
-test('addNote puts a new note first; blank and long notes are refused; removeNote by id', () => {
+test('addNote (comments) puts a new one first; blank and long ones are refused; removeNote by id', () => {
   const notes = addNote(PROFILE.notes, '  Call after Eid  ', new Date(2026, 8, 28, 9, 0));
   assertEqual(notes.length, 2);
   assertEqual(notes[0].text, 'Call after Eid');
@@ -79,7 +79,7 @@ test('addNote puts a new note first; blank and long notes are refused; removeNot
   assertEqual(PROFILE.notes.length, 1, 'input untouched');
   assertDeepEqual(removeNote(notes, notes[0].id), PROFILE.notes);
   assertEqual(addNote(undefined, 'first').length, 1);
-  for (const [text, re] of [['  ', /Write the note/], ['x'.repeat(NOTE_LIMIT + 1), /under 5,000/]]) {
+  for (const [text, re] of [['  ', /Write the comment/], ['x'.repeat(NOTE_LIMIT + 1), /under 5,000/]]) {
     let message = '';
     try { addNote([], text); } catch (err) { message = err.message; }
     assert(re.test(message), message);
@@ -131,4 +131,53 @@ test('newActionItems: a meeting\'s action items not yet tasks; a vague due date 
 
 test('pickableClients: named clients A–Z', () => {
   assertDeepEqual(pickableClients([{ key: 'z', name: 'Zed' }, { key: '', name: '(No client)' }, { key: 'a', name: 'Acme' }]), ['Acme', 'Zed']);
+});
+
+test('comments: a client can have many, newest first, each with its date and time on the timeline', () => {
+  let notes = [];
+  notes = addNote(notes, 'First call went well', new Date(2026, 8, 20, 9, 15));
+  notes = addNote(notes, 'Sent the deck', new Date(2026, 8, 22, 16, 5));
+  notes = addNote(notes, 'Asked for a discount', new Date(2026, 8, 25, 11, 40));
+  assertDeepEqual(notes.map(n => n.text), ['Asked for a discount', 'Sent the deck', 'First call went well']);
+  const items = clientTimeline({ name: 'Acme Ltd.', profile: { notes } }, NOW);
+  assertDeepEqual(items.map(i => [i.title, i.date, i.time]), [
+    ['Comment', '2026-09-25', '11:40'], ['Comment', '2026-09-22', '16:05'], ['Comment', '2026-09-20', '09:15']
+  ]);
+});
+
+test('clientTimeline marks duplicate reminders and ones kept off the calendar', () => {
+  const items = clientTimeline({
+    name: 'Acme Ltd.',
+    events: [
+      { id: 'a', clientName: 'Acme Ltd.', title: 'Call', date: '2026-10-01', time: '09:00' },
+      { id: 'b', clientName: 'Acme Ltd.', title: 'Call', date: '2026-10-01', time: '09:00', duplicate: true, calendarHidden: true }
+    ]
+  }, NOW);
+  const byRef = Object.fromEntries(items.map(i => [i.ref, i]));
+  assertDeepEqual([byRef.a.duplicate, byRef.a.onCalendar], [false, true]);
+  assertDeepEqual([byRef.b.duplicate, byRef.b.onCalendar], [true, false]);
+});
+
+const CLIENT = { key: 'acme ltd.', name: 'Acme Ltd.', status: 'potential', phone: '+971 4 111 2222', location: '', city: 'Dubai', country: 'UAE' };
+
+test('followUpReminder: date and time are required, notes optional; it carries the client\'s fields', () => {
+  const { reminder, error } = followUpReminder(CLIENT, { date: '2026-10-03', time: '14:00' }, NOW);
+  assertEqual(error, '');
+  assertDeepEqual([reminder.title, reminder.clientName, reminder.date, reminder.time, reminder.notes],
+    ['Follow up: Acme Ltd.', 'Acme Ltd.', '2026-10-03', '14:00', '']);
+  assertDeepEqual([reminder.status, reminder.city, reminder.phone], ['potential', 'Dubai', '+971 4 111 2222']);
+  assert(!('calendarHidden' in reminder), 'a follow-up goes on the calendar');
+  assertEqual(followUpReminder(CLIENT, { date: '03/10/2026', time: '09:30', notes: '  Bring the deck ' }).reminder.notes, 'Bring the deck');
+  assertEqual(followUpReminder(CLIENT, { date: '03/10/2026', time: '09:30' }).reminder.date, '2026-10-03');
+});
+
+test('followUpReminder refuses a missing or bad date or time, and notes that are too long', () => {
+  const error = fields => followUpReminder(CLIENT, { date: '2026-10-03', time: '14:00', ...fields }).error;
+  assertEqual(error({ date: '' }), 'Pick the follow-up date.');
+  assertEqual(error({ date: '31/02/2026' }), 'Use a date like 2026-10-03 or 03/10/2026.');
+  assertEqual(error({ time: '' }), 'Pick the follow-up time.');
+  assertEqual(error({ time: '25:00' }), 'Use a time like 14:00.');
+  assertEqual(error({ time: '9am' }), 'Use a time like 14:00.');
+  assert(/under 5,000/.test(error({ notes: 'x'.repeat(NOTE_LIMIT + 1) })));
+  assertEqual(followUpReminder(CLIENT, { date: '', time: '' }).reminder, null);
 });

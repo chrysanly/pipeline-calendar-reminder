@@ -3,7 +3,11 @@
 # Secrets (never in this file):
 #   npx wrangler secret put GROQ_API_KEY
 #   npx wrangler secret put APP_TOKEN        # local-mode access token (long random string)
+#   npx wrangler secret put ALLOWED_EMAILS   # who may use it signed in, e.g. you@x.com,team@x.com
+#       (any number, comma separated; each must be the Google account's verified email;
+#        empty = no signed-in account gets in; run the command again to change the list)
 #   npx wrangler secret put RESEND_API_KEY   # optional, for /notify email alerts
+# Full guide: docs/worker-setup.md
 # Local development: copy .dev.vars.example to .dev.vars, then npx wrangler dev
 
 name = "cladflo-worker"

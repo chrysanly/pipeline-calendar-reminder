@@ -1,19 +1,24 @@
 // Minutes view: pick a client and date, paste or import a transcript, generate
-// the minutes with Groq, edit them, then save (minutes only, never the
-// transcript). Saved minutes are listed per client with Copy and Delete.
+// the minutes with Groq (an own key, else the CladFlo Worker), edit them, then
+// save (minutes only, never the transcript). Saved minutes are listed per client with Copy and Delete.
 
 import { formatDayLabel, toDateKey } from './calendar.js';
 import { clientKey } from './storage.js';
 import { parseTranscript, MAX_TRANSCRIPT_BYTES } from './transcript.js';
-import { chatGroq, loadGroqKey, loadGroqModel } from './groq.js';
+import { loadGroqKey, loadGroqModel, minutesSource, minutesChat } from './groq.js';
+import { workerAuth } from './ai.js';
 import {
   generateMinutes, normalizeMeeting, minutesToText, actionItemsToLines, linesToActionItems
 } from './minutes.js';
 import { $, el, withIcon, showView, setBusy } from './ui.js';
+import { createCombobox } from './select.js';
+import { createDatePicker } from './datepicker.js';
 
 // The minutes being edited: a fresh draft, or a saved one (with its id).
 let draft = null;
 let busy = false;
+// Known client names for the searchable client field, set on every render.
+let minutesClientNames = [];
 
 function setProgress(message, isError = false) {
   const node = $('#minutes-progress');
@@ -73,8 +78,9 @@ async function copyText(value, handlers) {
 async function generate(handlers) {
   if (busy) return;
   const key = loadGroqKey();
-  if (!key) {
-    setProgress('Add your free Groq API key in AI settings first.', true);
+  const { workerUrl, user } = handlers.minutesWorker();
+  if (!minutesSource({ key, workerUrl })) {
+    setProgress('The AI is not connected: the CladFlo Worker URL is missing. Add it in Settings → Business.', true);
     needsKey(true);
     return;
   }
@@ -90,19 +96,21 @@ async function generate(handlers) {
   busy = true;
   setBusy($('#minutes-generate'), true);
   try {
+    const auth = key ? {} : await workerAuth(user);
     const minutes = await generateMinutes({
       transcript,
       client,
       date,
       onProgress: message => setProgress(message),
-      chat: (messages, { json }) => chatGroq({ key, model, messages, json })
+      chat: minutesChat({ key, workerUrl, auth, model })
     });
     draft = { ...minutes, clientName: client, model };
     fillEditor(minutes);
     setProgress('Done. Check the minutes, edit anything, then save.');
   } catch (err) {
     setProgress(err.message, true);
-    needsKey(err.status === 401);
+    // The Worker refused (not signed in, or not on its list): its message says why.
+    needsKey(false);
   } finally {
     busy = false;
     setBusy($('#minutes-generate'), false);
@@ -178,27 +186,44 @@ function renderSaved(meetings, handlers) {
   }
 }
 
+// The client whose profile opened Minutes: "Back" returns there.
+let minutesFrom = '';
+
+/** From the Client page: new minutes for this client, dated today. */
+export function prefillMinutes(clientName) {
+  minutesFrom = clientName;
+  $('#minutes-back-label').textContent = `Back to ${clientName}`;
+  $('#minutes-client').value = clientName;
+  $('#minutes-date').value = toDateKey(new Date());
+  setProgress(`New minutes for ${clientName}: paste or import the transcript, then generate.`);
+  requestAnimationFrame(() => $('#minutes-transcript').focus());
+}
+
 /** state.meetings: newest first; state.events give the client suggestions. */
 export function renderMinutes(state, handlers) {
   showView('minutes');
   const names = new Map();
   for (const evt of state.events) if (clientKey(evt.clientName)) names.set(clientKey(evt.clientName), evt.clientName);
-  const list = $('#minutes-clients');
-  list.innerHTML = '';
-  for (const name of [...names.values()].sort((a, b) => a.localeCompare(b))) {
-    const option = el('option');
-    option.value = name;
-    list.appendChild(option);
-  }
+  minutesClientNames = [...names.values()].sort((a, b) => a.localeCompare(b));
   if (!$('#minutes-date').value) $('#minutes-date').value = toDateKey(new Date());
   renderSaved(state.meetings, handlers);
 }
 
 /**
  * handlers: onSaveMinutes(meeting, isNew), onDeleteMinutes(meeting),
- * onOpenSettings(), onNotice(title, body).
+ * onOpenSettings(), onNotice(title, body), minutesWorker() → {workerUrl, user}, onBackToClient(name).
  */
 export function bindMinutes(handlers) {
+  createDatePicker($('#minutes-date'), { label: 'Choose the meeting date' });
+  $('#minutes-back').addEventListener('click', () => {
+    const name = minutesFrom || $('#minutes-client').value.trim();
+    if (name) handlers.onBackToClient(name);
+  });
+  // Type to search the clients; a new name can still be typed.
+  createCombobox($('#minutes-client'), {
+    getOptions: () => minutesClientNames.map(name => ({ value: name, label: name })),
+    emptyText: 'A new client'
+  });
   $('#minutes-form').addEventListener('submit', e => {
     e.preventDefault();
     generate(handlers);

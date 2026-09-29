@@ -133,3 +133,22 @@ export function eventsSortedByTime(list) {
   return list.slice().sort((a, b) =>
     (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
 }
+
+/**
+ * The dates the current calendar view shows, for Clear calendar: the day, the
+ * week (Sunday to Saturday) or the month. label is the toolbar's own label.
+ * @returns {{view: string, from: string, to: string, label: string}}
+ */
+export function calendarPeriod(view, date) {
+  let from = date;
+  let to = date;
+  if (view === 'week') {
+    from = startOfWeek(date);
+    to = addDays(from, 6);
+  } else if (view !== 'day') {
+    from = new Date(date.getFullYear(), date.getMonth(), 1);
+    to = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  }
+  const shown = CALENDAR_VIEWS.includes(view) ? view : 'month';
+  return { view: shown, from: toDateKey(from), to: toDateKey(to), label: formatRangeLabel(shown, date) };
+}

@@ -19,6 +19,95 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Team chat (js/views/chat.js): one room, chat/main/messages. Only the
+    // signed-in, verified emails on this list may read it or post. Nobody may
+    // edit or delete a message. To add someone, add their Google email here
+    // (lower case) and deploy the rules: firebase deploy --only firestore:rules
+    function chatMember() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'chrys.romao21@gmail.com',
+          'palmajoyceann@gmail.com'
+        ];
+    }
+
+    match /chat/{room}/messages/{messageId} {
+      allow read: if chatMember();
+      // Text up to 1000 characters; it may be empty when a file is attached.
+      allow create: if chatMember()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'email', 'text', 'at', 'attachment', 'replyTo'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email.lower()
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 1000
+        && (request.resource.data.text.size() > 0 || 'attachment' in request.resource.data)
+        && (!('attachment' in request.resource.data) || (
+          request.resource.data.attachment.keys().hasOnly(['id', 'name', 'type', 'size', 'kind', 'chunks'])
+          && request.resource.data.attachment['size'] is int
+          && request.resource.data.attachment['size'] <= 10485760
+          && request.resource.data.attachment.chunks is int
+          && request.resource.data.attachment.chunks <= 20
+          && request.resource.data.attachment.kind in ['image', 'video', 'file']))
+        // A reply: the message it answers (id), who wrote that, and up to 120 characters of it.
+        && (!('replyTo' in request.resource.data) || (
+          request.resource.data.replyTo.keys().hasOnly(['id', 'name', 'snippet'])
+          && request.resource.data.replyTo.id is string
+          && request.resource.data.replyTo.id.size() > 0
+          && request.resource.data.replyTo.id.size() <= 64
+          && request.resource.data.replyTo.name is string
+          && request.resource.data.replyTo.name.size() <= 120
+          && request.resource.data.replyTo.snippet is string
+          && request.resource.data.replyTo.snippet.size() <= 120))
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.at is string
+        && request.resource.data.at.size() <= 40;
+      allow update, delete: if false;
+    }
+
+    // A chat attachment: who sent it, then its bytes as base64 pieces (the
+    // free plan has no file storage). Up to 10 MB in 20 pieces; never edited.
+    match /chat/{room}/files/{fileId} {
+      allow read: if chatMember();
+      allow create: if chatMember()
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'type', 'size', 'chunks', 'at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data['size'] is int
+        && request.resource.data['size'] <= 10485760
+        && request.resource.data.chunks is int
+        && request.resource.data.chunks <= 20;
+      allow update, delete: if false;
+
+      match /chunks/{chunkId} {
+        allow read: if chatMember();
+        allow create: if chatMember()
+          && request.resource.data.keys().hasOnly(['uid', 'data'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.data is string
+          && request.resource.data.data.size() <= 700000
+          && get(/databases/$(database)/documents/chat/$(room)/files/$(fileId)).data.uid == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    // Who is online and who is typing: each person writes only their own doc.
+    match /chat/{room}/presence/{uid} {
+      allow read: if chatMember();
+      allow create, update: if chatMember()
+        && uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'email', 'lastSeen', 'typingAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email.lower()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.lastSeen is string
+        && request.resource.data.lastSeen.size() <= 40
+        && request.resource.data.typingAt is string
+        && request.resource.data.typingAt.size() <= 40;
+      allow delete: if false;
+    }
+
     match /portals/{token} {
       function isOwner() {
         return signedIn() && resource.data.ownerUid == request.auth.uid;

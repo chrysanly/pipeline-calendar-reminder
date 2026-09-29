@@ -1,8 +1,9 @@
 // History view: every change, newest first, with action/client filters,
-// a search box and a relative time on each entry.
+// a search box and a relative time on each entry. Imports whose file was kept
+// get a Re-import button.
 
-import { HISTORY_ACTIONS, HISTORY_LABELS, filterHistory, historyClients, relativeTime } from './history.js';
-import { $, el, icon, showView } from './ui.js';
+import { HISTORY_ACTIONS, HISTORY_LABELS, filterHistory, historyClients, relativeTime, canReimport } from './history.js';
+import { $, el, icon, withIcon, withBusy, showView } from './ui.js';
 
 const ACTION_ICONS = {
   create: 'fa-plus',
@@ -28,7 +29,15 @@ function fillSelect(select, allLabel, options, value) {
   select.value = options.some(([v]) => v === value) ? value : '';
 }
 
-function renderEntry(entry, now) {
+function reimportButton(entry, handlers) {
+  const button = withIcon(el('button', 'ghost history-reimport'), 'fa-rotate-right', 'Re-import');
+  button.type = 'button';
+  button.title = `Import ${entry.title} again`;
+  button.addEventListener('click', () => withBusy(button, () => handlers.onReimport(entry)));
+  return button;
+}
+
+function renderEntry(entry, now, handlers) {
   const item = el('li', `history-item action-${entry.action}`);
   item.dataset.action = entry.action;
 
@@ -39,6 +48,7 @@ function renderEntry(entry, now) {
   body.appendChild(el('span', 'history-title', entry.title || '(untitled)'));
   const meta = [entry.kind === 'minutes' ? 'Minutes' : '', entry.client, entry.detail].filter(Boolean).join(' · ');
   if (meta) body.appendChild(el('span', 'history-meta', meta));
+  if (canReimport(entry)) body.appendChild(reimportButton(entry, handlers));
 
   const time = el('time', 'history-time', relativeTime(entry.at, now));
   time.dateTime = entry.at;
@@ -48,8 +58,11 @@ function renderEntry(entry, now) {
   return item;
 }
 
-/** state.history is newest first; state.historyFilter is {action, client, search}. */
-export function renderHistory(state) {
+/**
+ * state.history is newest first; state.historyFilter is {action, client, search}.
+ * handlers.onReimport(entry) imports an entry's kept file again.
+ */
+export function renderHistory(state, handlers) {
   showView('history');
   const filters = state.historyFilter;
   fillSelect($('#history-client'), 'All clients', historyClients(state.history).map(name => [name, name]), filters.client);
@@ -65,7 +78,7 @@ export function renderHistory(state) {
     return;
   }
   const now = new Date();
-  for (const entry of shown) list.appendChild(renderEntry(entry, now));
+  for (const entry of shown) list.appendChild(renderEntry(entry, now, handlers));
 }
 
 export function bindHistory(handlers) {

@@ -11,11 +11,17 @@
   const authListeners = new Set();
   let currentUser = null;
 
-  function snapshotOf(colPath) {
+  // query: { field, dir, limit } from orderBy(...).limit(...) (the chat).
+  function snapshotOf(colPath, query = {}) {
     const prefix = `${colPath}/`;
-    const list = [...docs.entries()]
-      .filter(([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
-      .map(([path, data]) => ({ id: path.slice(prefix.length), data: () => clone(data) }));
+    let entries = [...docs.entries()]
+      .filter(([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'));
+    if (query.field) {
+      const sign = query.dir === 'desc' ? -1 : 1;
+      entries.sort(([, a], [, b]) => sign * String(a[query.field]).localeCompare(String(b[query.field])));
+    }
+    if (query.limit) entries = entries.slice(0, query.limit);
+    const list = entries.map(([path, data]) => ({ id: path.slice(prefix.length), data: () => clone(data) }));
     return { docs: list, size: list.length, empty: !list.length, metadata: { fromCache: false, hasPendingWrites: false } };
   }
 
@@ -27,7 +33,7 @@
       touched.add(parentOf(path));
       log.push({ op, path, data: data ? clone(data) : undefined, origin });
     }
-    for (const l of listeners) if (touched.has(l.colPath)) l.next(snapshotOf(l.colPath));
+    for (const l of listeners) if (touched.has(l.colPath)) l.next(snapshotOf(l.colPath, l.query));
   }
 
   function docRef(path) {
@@ -36,7 +42,11 @@
       id: path.split('/').pop(),
       collection: name => collectionRef(`${path}/${name}`),
       // Single-document calls (the client portal, portals/{token}).
-      async set(data) { apply([['set', path, data]], 'app'); },
+      async set(data) {
+        // window.__fakeHold.denyWrites: the rules refuse (not on the chat list).
+        if ((window.__fakeHold || {}).denyWrites) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+        apply([['set', path, data]], 'app');
+      },
       async delete() { apply([['delete', path]], 'app'); },
       async get() {
         const data = docs.get(path);
@@ -45,18 +55,25 @@
     };
   }
 
-  function collectionRef(path) {
+  function collectionRef(path, query = {}) {
     return {
       path,
       doc: id => docRef(`${path}/${id}`),
-      onSnapshot(next) {
-        const l = { colPath: path, next };
+      orderBy: (field, dir = 'asc') => collectionRef(path, { ...query, field, dir }),
+      limit: n => collectionRef(path, { ...query, limit: n }),
+      onSnapshot(next, error) {
+        // window.__fakeHold.denyChatReads: the rules refuse the chat (not on the list, or not deployed).
+        if ((window.__fakeHold || {}).denyChatReads && path.startsWith('chat/')) {
+          setTimeout(() => error && error(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })), 0);
+          return () => {};
+        }
+        const l = { colPath: path, next, query };
         listeners.add(l);
         // window.__fakeHold.snapshot: the first snapshot never arrives (slow network).
-        if (!(window.__fakeHold || {}).snapshot) setTimeout(() => { if (listeners.has(l)) next(snapshotOf(path)); }, 0);
+        if (!(window.__fakeHold || {}).snapshot) setTimeout(() => { if (listeners.has(l)) next(snapshotOf(path, query)); }, 0);
         return () => listeners.delete(l);
       },
-      get: async () => snapshotOf(path)
+      get: async () => snapshotOf(path, query)
     };
   }
 

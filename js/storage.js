@@ -84,7 +84,11 @@ export function normalizeEvent(data) {
   if (data.importKey) {
     evt.source = data.source || 'import';
     evt.importKey = data.importKey;
+    // A row an upload added again rather than updating (importer.js).
+    if (data.duplicate) evt.duplicate = true;
   }
+  // Cleared from the calendar: still on Home, no popup (hideFromCalendar).
+  if (data.calendarHidden) evt.calendarHidden = true;
   return evt;
 }
 
@@ -135,4 +139,58 @@ export function groupByDate(list) {
     group.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   }
   return map;
+}
+
+/** The reminders the calendar views and popups show: not cleared from the calendar. */
+export function calendarEvents(list) {
+  return list.filter(evt => !evt.calendarHidden);
+}
+
+/**
+ * Put every dated reminder of one client on the calendar (`onCalendar` true)
+ * or take them off it. Imports start off it (importer.js).
+ * @returns {{events: object[], count: number}} count: how many changed
+ */
+export function setClientOnCalendar(list, clientName, onCalendar, updatedAt = new Date().toISOString()) {
+  const key = clientKey(clientName);
+  let count = 0;
+  const events = list.map(evt => {
+    if (!key || clientKey(evt.clientName) !== key || !evt.date) return evt;
+    if (Boolean(evt.calendarHidden) === !onCalendar) return evt;
+    count++;
+    return normalizeEvent({ ...evt, calendarHidden: !onCalendar, updatedAt });
+  });
+  return { events: count ? events : list, count };
+}
+
+/** How many of a client's dated reminders are on / off the calendar. */
+export function calendarCounts(list, clientName) {
+  const key = clientKey(clientName);
+  const mine = list.filter(evt => key && clientKey(evt.clientName) === key && evt.date);
+  const hidden = mine.filter(evt => evt.calendarHidden).length;
+  return { shown: mine.length - hidden, hidden };
+}
+
+/** How many reminders on the calendar fall in from..to (inclusive): what Clear calendar would clear. */
+export function countOnCalendar(list, { from = '', to = '' } = {}) {
+  return calendarEvents(list).filter(evt => evt.date && (!from || evt.date >= from) && (!to || evt.date <= to)).length;
+}
+
+/**
+ * Clear reminders from the calendar only: they stay on Home and in the data,
+ * but no longer show on the calendar or pop up. `from` / `to` are optional
+ * 'YYYY-MM-DD' bounds, both inclusive; blank means open-ended.
+ * @returns {{events: object[], count: number}} count: how many were hidden now
+ * @throws when `from` is after `to`
+ */
+export function hideFromCalendar(list, { from = '', to = '' } = {}, updatedAt = new Date().toISOString()) {
+  if (from && to && from > to) throw new Error('"From" must be on or before "To".');
+  const inRange = evt => Boolean(evt.date) && (!from || evt.date >= from) && (!to || evt.date <= to);
+  let count = 0;
+  const events = list.map(evt => {
+    if (evt.calendarHidden || !inRange(evt)) return evt;
+    count++;
+    return normalizeEvent({ ...evt, calendarHidden: true, updatedAt });
+  });
+  return { events: count ? events : list, count };
 }

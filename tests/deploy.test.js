@@ -10,19 +10,42 @@ import { fileURLToPath } from 'node:url';
 import { firebaseSetupProblems, FILL_IN_ENV } from '../scripts/check-firebase.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const read = name => readFileSync(join(root, name), 'utf8');
+// Line endings may be CRLF on Windows checkouts: compare them as LF.
+const read = name => readFileSync(join(root, name), 'utf8').replace(/\r\n/g, '\n');
 
 test('firestore.rules only lets a user touch users/{their uid}/…', () => {
   const rules = read('firestore.rules');
   assert(rules.includes("rules_version = '2'"), 'rules v2');
   assert(/match \/users\/\{uid\}\/\{doc=\*\*\}/.test(rules), 'no users/{uid}/{doc=**} match');
   assert(/allow read, write: if request\.auth != null && request\.auth\.uid == uid;/.test(rules), 'no uid check');
-  // Besides users/{uid}, only the client portal is reachable.
+  // Besides users/{uid}, only the team chat and the client portal are reachable.
   const outside = rules.replace(/match \/users\/\{uid\}\/\{doc=\*\*\} \{[^}]*\}/, '');
   const matches = [...outside.matchAll(/match \/([^ ]+) \{/g)].map(m => m[1]);
-  assertEqual(JSON.stringify(matches), JSON.stringify(['databases/{database}/documents', 'portals/{token}', 'replies/{replyId}']), 'unexpected match block');
+  assertEqual(JSON.stringify(matches), JSON.stringify(['databases/{database}/documents', 'chat/{room}/messages/{messageId}', 'chat/{room}/files/{fileId}', 'chunks/{chunkId}', 'chat/{room}/presence/{uid}', 'portals/{token}', 'replies/{replyId}']), 'unexpected match block');
   assert(!/if true/.test(rules), 'rules must never allow everything');
-  assert(!/allow (?:read|list|write)[^;]*;/.test(outside.replace(/allow read, delete: if signedIn\(\) && portalOwner\(\) == request\.auth\.uid;/, '')), 'portal pages must not be listable or freely writable');
+  const gated = outside
+    .replace(/allow read, delete: if signedIn\(\) && portalOwner\(\) == request\.auth\.uid;/, '')
+    .replaceAll('allow read: if chatMember();', '');
+  assert(!/allow (?:read|list|write)[^;]*;/.test(gated), 'portal pages must not be listable or freely writable');
+});
+
+test('firestore.rules: chat is read/create only for the allowed emails, capped at 1000, never edited or deleted', () => {
+  const rules = read('firestore.rules');
+  const chat = rules.slice(rules.indexOf('function chatMember()'), rules.indexOf('match /portals/'));
+  assert(chat.includes('email_verified == true'), 'a verified email');
+  assert(/email\.lower\(\) in \[/.test(chat), 'an allowed list');
+  assert(chat.includes('match /chat/{room}/messages/{messageId}'));
+  assert(chat.includes('allow read: if chatMember();'));
+  assert(chat.includes("hasOnly(['uid', 'name', 'email', 'text', 'at', 'attachment', 'replyTo'])"));
+  assert(chat.includes('replyTo.snippet.size() <= 120'), 'a reply keeps at most 120 characters');
+  assert(chat.includes("(request.resource.data.text.size() > 0 || 'attachment' in request.resource.data)"), 'text or a file');
+  assert(chat.includes("attachment['size'] <= 10485760"), 'files up to 10 MB');
+  assert(chat.includes('data.data.size() <= 700000'), 'pieces under the 1 MiB document limit');
+  assert(chat.includes('uid == request.auth.uid\n        && request.resource.data.keys().hasOnly([\'uid\', \'name\', \'email\', \'lastSeen\', \'typingAt\'])'), 'presence: only your own doc');
+  assert((chat.match(/allow update, delete: if false;/g) || []).length >= 3, 'messages, files and pieces are never edited');
+  assert(chat.includes('request.resource.data.uid == request.auth.uid'), 'you post only as yourself');
+  assert(chat.includes('text.size() <= 1000'));
+  assert(chat.includes('allow update, delete: if false;'));
 });
 
 test('firestore.rules: a portal page is read by its link only and written by its owner only', () => {

@@ -1,7 +1,7 @@
 import { test, assert, assertEqual, assertDeepEqual } from './runner.js';
 import {
   HISTORY_ACTIONS, HISTORY_LIMIT, logEntry, normalizeEntry, addHistory, sortHistory,
-  historyClients, filterHistory, relativeTime
+  historyClients, filterHistory, relativeTime, canReimport
 } from '../js/history.js';
 
 const NOW = new Date('2026-09-28T12:00:00.000Z');
@@ -70,4 +70,14 @@ test('relativeTime reads like a person would say it', () => {
   assertEqual(relativeTime(ago(4 * 86400000), NOW), '4 days ago');
   assert(/2026/.test(relativeTime(ago(30 * 86400000), NOW)), 'older entries show the date');
   assertEqual(relativeTime('not a date', NOW), '');
+});
+
+test('an import entry keeps its fileId and can be re-imported; others cannot', () => {
+  const entry = logEntry({ action: 'import', kind: 'reminder', title: 'leads.xlsx', detail: 'Imported 3', fileId: ' file_1 ' }, NOW);
+  assertEqual(entry.fileId, 'file_1');
+  assert(canReimport(entry));
+  assertEqual(normalizeEntry({ ...entry }).fileId, 'file_1', 'the id survives a save and load');
+  assert(!('fileId' in logEntry({ action: 'import', title: 'old.xlsx' }, NOW)), 'no file, no key');
+  assert(!canReimport(logEntry({ action: 'import', title: 'old.xlsx' }, NOW)));
+  assert(!canReimport(logEntry({ action: 'clear', kind: 'calendar', title: 'Cleared', fileId: 'file_1' }, NOW)));
 });

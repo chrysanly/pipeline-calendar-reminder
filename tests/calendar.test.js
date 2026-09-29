@@ -1,3 +1,4 @@
+import { calendarPeriod } from '../js/calendar.js';
 import { test, assert, assertEqual, assertDeepEqual } from './runner.js';
 import {
   getMonthGrid, toDateKey, fromDateKey, addMonths, formatMonthLabel, formatDayLabel,
@@ -146,4 +147,13 @@ test('eventsSortedByTime orders by date then time without mutating', () => {
 test('VIEWS: Home, the 3 calendar views, Minutes and History', () => {
   assertDeepEqual(VIEWS, ['dashboard', 'day', 'week', 'month', 'minutes', 'history']);
   assertDeepEqual(CALENDAR_VIEWS, ['day', 'week', 'month']);
+});
+
+test('calendarPeriod: the day, the Sunday-to-Saturday week or the month on screen, with its label', () => {
+  const sat = new Date(2026, 9, 3);
+  assertDeepEqual(calendarPeriod('day', sat), { view: 'day', from: '2026-10-03', to: '2026-10-03', label: 'Sat, 3 Oct 2026' });
+  assertDeepEqual(calendarPeriod('week', sat), { view: 'week', from: '2026-09-27', to: '2026-10-03', label: '27 Sep – 3 Oct 2026' });
+  assertDeepEqual(calendarPeriod('month', sat), { view: 'month', from: '2026-10-01', to: '2026-10-31', label: 'October 2026' });
+  assertDeepEqual(calendarPeriod('month', new Date(2028, 1, 10)).to, '2028-02-29', 'leap year');
+  assertEqual(calendarPeriod('dashboard', sat).view, 'month', 'not a calendar view: the month');
 });

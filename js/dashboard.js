@@ -46,6 +46,8 @@ export function buildClients(events, now = new Date()) {
       name: key ? list[0].clientName.trim().replace(/\s+/g, ' ') : NO_CLIENT,
       status: STATUSES.includes(latest.status) ? latest.status : 'lead',
       reminderCount: list.length,
+      // Rows an import added again (importer.js): Home shows a Duplicate badge.
+      duplicateCount: list.filter(evt => evt.duplicate).length,
       nextReminder: upcoming.length ? reminderRef(upcoming[0].evt) : null,
       latestReminder: byDate.length ? reminderRef(byDate[0].evt) : reminderRef(latest),
       lastUpdated: latest.updatedAt || ''
@@ -66,6 +68,46 @@ export function statusCounts(clients) {
   const counts = { lead: 0, potential: 0, active: 0, inactive: 0 };
   for (const c of clients) counts[c.status] = (counts[c.status] || 0) + 1;
   return counts;
+}
+
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+/**
+ * The Home chart: Potential and Active clients at the end of each of the last
+ * `months` months (this one included). A client counts from the month it was
+ * last saved (its latest status); one with no timestamp counts in every month.
+ * @returns {{months: {key: string, label: string, potential: number, active: number}[],
+ *   totals: {potential: number, active: number}, share: {potential: number, active: number}, max: number}}
+ * share: whole-number percent of all clients (every status) that are potential / active.
+ */
+export function progressData(clients, now = new Date(), months = 6) {
+  const tracked = clients
+    .filter(c => c.status === 'potential' || c.status === 'active')
+    .map(c => {
+      const saved = c.lastUpdated ? new Date(c.lastUpdated) : null;
+      return { status: c.status, from: saved && !Number.isNaN(saved.getTime()) ? monthKey(saved) : '' };
+    });
+  const series = [];
+  for (let back = months - 1; back >= 0; back--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - back, 1);
+    const key = monthKey(date);
+    const upTo = tracked.filter(c => c.from <= key);
+    series.push({
+      key,
+      label: SHORT_MONTHS[date.getMonth()],
+      potential: upTo.filter(c => c.status === 'potential').length,
+      active: upTo.filter(c => c.status === 'active').length
+    });
+  }
+  const totals = {
+    potential: tracked.filter(c => c.status === 'potential').length,
+    active: tracked.filter(c => c.status === 'active').length
+  };
+  const max = Math.max(1, ...series.map(m => Math.max(m.potential, m.active)));
+  const percent = count => (clients.length ? Math.round((count / clients.length) * 100) : 0);
+  const share = { potential: percent(totals.potential), active: percent(totals.active) };
+  return { months: series, totals, share, max };
 }
 
 const placeName = value => value || UNKNOWN;
@@ -128,3 +170,98 @@ export function paginate(list, page = 1, size = PAGE_SIZES[0]) {
   const items = list.slice(from, from + size);
   return { items, page: current, pages, start: total ? from + 1 : 0, end: from + items.length, total };
 }
+
+// ---------- Board filters (js/views/kanban.js) ----------
+
+export const EMPTY_BOARD_FILTERS = Object.freeze({ search: '', status: null, country: null, city: null });
+
+/** Saved filters (JSON from localStorage), cleaned up; anything unreadable is no filter. */
+export function parseBoardFilters(raw) {
+  let data = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+  if (!data || typeof data !== 'object') return { ...EMPTY_BOARD_FILTERS };
+  const pick = value => (typeof value === 'string' && value.trim() ? value : null);
+  return {
+    search: typeof data.search === 'string' ? data.search.slice(0, 200) : '',
+    status: STATUSES.includes(data.status) ? data.status : null,
+    country: pick(data.country),
+    city: pick(data.city)
+  };
+}
+
+export const hasBoardFilters = filters =>
+  Boolean((filters.search || '').trim() || filters.status || filters.country || filters.city);
+
+/**
+ * The board columns ({status: cards[]}) with only the cards matching every
+ * filter (as filterClients). shown / total count the cards.
+ */
+export function filterBoard(columns, filters = EMPTY_BOARD_FILTERS) {
+  const result = {};
+  let shown = 0;
+  let total = 0;
+  for (const [status, cards] of Object.entries(columns)) {
+    result[status] = filterClients(cards, filters);
+    shown += result[status].length;
+    total += cards.length;
+  }
+  return { columns: result, shown, total };
+}
+
+// ---------- Home list: one line per client, plus one per duplicate row ----------
+
+/**
+ * The Home client list: each client (its own reminders), then one line per
+ * reminder an import marked `duplicate`, so every imported row shows and the
+ * duplicates can carry a badge. A 3867-row file gives 3867 lines.
+ * `clients` is buildClients(events).
+ */
+export function homeRows(clients, events, now = new Date()) {
+  const dupes = new Map();
+  for (const evt of events) {
+    if (!evt.duplicate) continue;
+    const key = clientKey(evt.clientName);
+    if (!dupes.has(key)) dupes.set(key, []);
+    dupes.get(key).push(evt);
+  }
+  const rows = [];
+  for (const client of clients) {
+    const own = dupes.get(client.key) || [];
+    rows.push({ ...client, rowId: `client:${client.key}`, isDuplicate: false, reminderCount: client.reminderCount - own.length });
+    const byDate = own.slice().sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+    for (const evt of byDate) {
+      const when = eventDateTime(evt);
+      const ref = reminderRef(evt);
+      rows.push({
+        ...client,
+        rowId: `dup:${evt.id}`,
+        isDuplicate: true,
+        eventId: evt.id,
+        phone: evt.phone || client.phone,
+        location: evt.location || client.location,
+        reminderCount: 1,
+        duplicateCount: 0,
+        nextReminder: when && when.getTime() >= now.getTime() ? ref : null,
+        latestReminder: ref
+      });
+    }
+  }
+  return rows;
+}
+
+// ---------- Home shows the pipeline: potential and active clients only ----------
+
+export const HOME_STATUSES = ['potential', 'active'];
+
+/** The clients Home lists: potential and active (every client is on the Client tab). */
+export const pipelineClients = clients => clients.filter(c => HOME_STATUSES.includes(c.status));
+
+/** A Home status filter: potential, active, or null (both); anything else is no filter. */
+export const homeStatusFilter = status => (HOME_STATUSES.includes(status) ? status : null);
+
+/** How many reminders an import added again (`duplicate: true`): the Home Duplicates card. */
+export const duplicateCount = events => events.filter(evt => evt.duplicate).length;

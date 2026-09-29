@@ -13,7 +13,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const ENTRY = 'app.js';
 
 // Inlined in this order, each where index.html links it.
-const STYLESHEETS = ['tokens.css', 'components.css', 'styles.css', 'nav.css', 'dashboard.css', 'responsive.css', 'features.css'];
+const STYLESHEETS = ['tokens.css', 'components.css', 'pickers.css', 'styles.css', 'nav.css', 'dashboard.css', 'responsive.css', 'features.css'];
 // Every other css/*.css is a feature stylesheet (a view loads it when it
 // registers, see ui.js loadStylesheet), inlined before </head>; these belong
 // to other pages.

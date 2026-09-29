@@ -8,9 +8,9 @@ import { openApp, fillForm } from './helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-test('the top nav is Home, Calendar, Minutes, History, then feature pages (Board, Client), left of the theme and settings buttons', async ({ page }) => {
+test('the top nav is Home, Calendar, History, then feature pages (Board, Client, CladFlo Talk), left of the theme and settings buttons', async ({ page }) => {
   await openApp(page, undefined, { view: null });
-  await expect(page.locator('.topbar .views button .btn-label')).toHaveText(['Home', 'Calendar', 'Minutes', 'History', 'Board', 'Client']);
+  await expect(page.locator('.topbar .views button .btn-label')).toHaveText(['Home', 'Calendar', 'History', 'Board', 'Client', 'CladFlo Talk']);
   await expect(page.locator('.topbar #view-day, .topbar #view-week, .topbar #view-month')).toHaveCount(0);
   await expect(page.locator('.topbar #add-event, .topbar #import-btn, .topbar #prev')).toHaveCount(0);
 
@@ -34,8 +34,8 @@ test('Home has Import Excel; the calendar has prev/next, Today, Day/Week/Month a
   }
   await expect(page.locator('#import-btn')).toBeHidden();
 
-  // Minutes and History have neither.
-  await page.locator('#view-minutes').click();
+  // History (and the other pages) have neither.
+  await page.locator('#view-history').click();
   await expect(page.locator('#add-event')).toBeHidden();
   await expect(page.locator('#import-btn')).toBeHidden();
 });

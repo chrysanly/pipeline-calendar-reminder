@@ -13,6 +13,7 @@
 
 .minutes { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; }
 .minutes-work { display: grid; gap: var(--sp-5); min-width: 0; }
+.minutes-back { grid-column: 1 / -1; justify-self: start; }
 
 .minutes-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
 #minutes-open-settings { justify-self: start; }

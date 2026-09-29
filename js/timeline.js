@@ -9,11 +9,11 @@ import { clientKey } from './storage.js';
 export const TIMELINE_KINDS = ['reminder', 'note', 'minutes', 'activity', 'time', 'expense'];
 export const TIMELINE_LABELS = {
   reminder: 'Reminders',
-  note: 'Notes',
+  note: 'Comments',
   minutes: 'Minutes',
   activity: 'Activity',
   time: 'Time',
-  expense: 'Expenses'
+  expense: 'Invoices'
 };
 
 export const NOTE_LIMIT = 5000;
@@ -48,12 +48,13 @@ export function clientTimeline({ name, events = [], meetings = [], history = [],
     if (!tlSameClient(evt.clientName, key) || !evt.date) continue;
     const sort = `${evt.date}T${evt.time || '00:00'}`;
     items.push(tlItem('reminder', evt.id, sort, tlText(evt.title) || 'Reminder', tlText(evt.notes), {
-      ref: evt.id, upcoming: sort >= nowStamp, allDay: !evt.time
+      ref: evt.id, upcoming: sort >= nowStamp, allDay: !evt.time,
+      duplicate: Boolean(evt.duplicate), onCalendar: !evt.calendarHidden
     }));
   }
   for (const note of (profile && Array.isArray(profile.notes)) ? profile.notes : []) {
     const sort = localStamp(note.at);
-    if (sort) items.push(tlItem('note', note.id, sort, 'Note', tlText(note.text), { ref: note.id }));
+    if (sort) items.push(tlItem('note', note.id, sort, 'Comment', tlText(note.text), { ref: note.id }));
   }
   for (const meeting of meetings) {
     if (!tlSameClient(meeting.clientName, key) || !meeting.date) continue;
@@ -79,7 +80,7 @@ export function clientTimeline({ name, events = [], meetings = [], history = [],
     if (!tlSameClient(expense.clientName, key) || !expense.date) continue;
     const at = localStamp(expense.createdAt);
     const sort = `${expense.date}T${at && at.startsWith(expense.date) ? at.slice(11) : '00:00'}`;
-    items.push(tlItem('expense', expense.id, sort, tlText(expense.category) || 'Expense', tlText(expense.note), {
+    items.push(tlItem('expense', expense.id, sort, tlText(expense.category) || 'Invoice', tlText(expense.note), {
       amount: expense.amount, currency: expense.currency, allDay: sort.endsWith('T00:00')
     }));
   }
@@ -98,23 +99,59 @@ export function timelineCounts(items) {
   return counts;
 }
 
-// ---------- notes (on the client's record) ----------
+// ---------- comments (stored as `notes` on the client's record) ----------
 
 const tlNoteId = () => `note_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
 /**
- * The notes with a new one first.
+ * The comments with a new one first; a client can have any number.
  * @throws when the text is blank or too long.
  */
 export function addNote(notes, text, now = new Date()) {
   const body = tlText(text);
-  if (!body) throw new Error('Write the note first.');
-  if (body.length > NOTE_LIMIT) throw new Error(`Keep a note under ${NOTE_LIMIT.toLocaleString('en-US')} characters.`);
+  if (!body) throw new Error('Write the comment first.');
+  if (body.length > NOTE_LIMIT) throw new Error(`Keep a comment under ${NOTE_LIMIT.toLocaleString('en-US')} characters.`);
   return [{ id: tlNoteId(), text: body, at: now.toISOString() }, ...(Array.isArray(notes) ? notes : [])];
 }
 
 export function removeNote(notes, id) {
   return (Array.isArray(notes) ? notes : []).filter(note => note.id !== id);
+}
+
+// ---------- follow-up: a calendar reminder from the Client page ----------
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * A follow-up reminder for `client` (from buildClients): date and time are
+ * required, notes are optional. It goes on the calendar and pops up.
+ * @returns {{reminder: object|null, error: string}}
+ */
+export function followUpReminder(client, { date, time, notes = '' }, now = new Date()) {
+  const day = parseDue(date);
+  if (!day) return { reminder: null, error: day === '' ? 'Pick the follow-up date.' : 'Use a date like 2026-10-03 or 03/10/2026.' };
+  const at = tlText(time);
+  if (!at) return { reminder: null, error: 'Pick the follow-up time.' };
+  if (!TIME_RE.test(at)) return { reminder: null, error: 'Use a time like 14:00.' };
+  const body = tlText(notes);
+  if (body.length > NOTE_LIMIT) return { reminder: null, error: `Keep the notes under ${NOTE_LIMIT.toLocaleString('en-US')} characters.` };
+  return {
+    reminder: {
+      title: `Follow up: ${client.name}`,
+      clientName: client.name,
+      date: day,
+      time: at,
+      notes: body,
+      reminderMinutesBefore: 0,
+      status: client.status,
+      phone: client.phone || '',
+      location: client.location || '',
+      city: client.city || '',
+      country: client.country || '',
+      updatedAt: now.toISOString()
+    },
+    error: ''
+  };
 }
 
 // ---------- tasks: task | owner | due ----------

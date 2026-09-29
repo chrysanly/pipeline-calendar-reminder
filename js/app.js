@@ -1,11 +1,11 @@
 // Entry point: state, wiring, reminder loop.
 
-import { toDateKey, fromDateKey, shiftCursor, formatDayLabel, VIEWS, CALENDAR_VIEWS } from './calendar.js';
-import { importWorkbook, mergeImported, importSummary, locationsFromPhoneCount } from './importer.js';
+import { toDateKey, fromDateKey, shiftCursor, formatDayLabel, calendarPeriod, VIEWS, CALENDAR_VIEWS } from './calendar.js';
+import { createImportFlow } from './import-flow.js';
 import { buildClients } from './dashboard.js';
 import {
   STORAGE_KEY, loadEvents, localBackend, addEvent, updateEvent, deleteEvent, findEvent,
-  applyClientFields, clientKey, STATUS_LABELS
+  applyClientFields, clientKey, hideFromCalendar, countOnCalendar, STATUS_LABELS
 } from './storage.js';
 import { createRecordStore } from './record-store.js';
 import { startReminderLoop, requestPermission } from './reminders.js';
@@ -21,15 +21,19 @@ import { FEATURES } from './features.js';
 import { initTheme, toggleTheme } from './theme.js';
 import {
   renderCalendar, renderPanel, isPanelOpen, swipeDirection, COMPACT_QUERY,
-  openModal, closeModal, isModalOpen, readForm, showBanner, bindBanner,
-  bindForm, withBusy, showView, mountView
+  openModal, closeModal, isModalOpen, readForm, bindForm, withBusy, showView, mountView
 } from './ui.js';
+import { showBanner, bindBanner, reportError, runWithToast } from './banner.js';
+import { installSelectMenus } from './select-menu.js';
+import { createDatePicker } from './datepicker.js';
 import { renderAuth, bindAccountMenu, isAccountMenuOpen, closeAccountMenu, trackSave } from './topbar-ui.js';
-import { loadXlsx } from './xlsx-loader.js';
 import { renderDashboard, bindDashboard, loadPageSize, savePageSize } from './dashboard-ui.js';
 import { renderHistory, bindHistory } from './history-ui.js';
-import { renderMinutes, bindMinutes } from './minutes-ui.js';
+import { renderMinutes, bindMinutes, prefillMinutes } from './minutes-ui.js';
 import { bindSettings, openSettings, closeSettings, isSettingsOpen } from './settings-ui.js';
+import {
+  bindClearCalendar, isClearCalendarOpen, closeClearCalendar
+} from './clear-calendar-ui.js';
 
 const VIEW_KEY = 'view';
 
@@ -83,6 +87,8 @@ const state = {
 let reminders = null;
 // The signed-in user in cloud mode (null signed out and in local mode).
 let currentUser = null;
+// Firestore in cloud mode (null in local mode), for features like the chat.
+let cloudDb = null;
 
 // Feature modules listen here: 'events-change' {prev, next},
 // 'status-change' {clientName, status, previous}, 'auth' {user},
@@ -95,7 +101,7 @@ const store = createStore({
     hooks.emit('store-change', { name });
     render();
   },
-  onError: err => showBanner('Could not save your change', err && err.message ? err.message : String(err))
+  onError: err => reportError('Could not save your change', saveErrorText(err))
 });
 
 const records = createRecordStore({
@@ -103,13 +109,23 @@ const records = createRecordStore({
     state[name] = list;
     render();
   },
-  onError: (title, message) => showBanner(title, message)
+  onError: (title, message) => reportError(title, message)
 });
 
-/** Add a History entry. kind: 'reminder' | 'client' | 'minutes' | 'data'. */
-function log(action, kind, title, client = '', detail = '') {
-  records.log({ action, kind, title, client, detail });
+/** Add a History entry. kind: 'reminder' | 'client' | 'minutes' | 'data' | 'calendar'. */
+function log(action, kind, title, client = '', detail = '', fileId = '') {
+  records.log({ action, kind, title, client, detail, fileId });
 }
+
+// Excel import and Re-import; the files are kept in this browser (file-store.js).
+const imports = createImportFlow({
+  state,
+  commit,
+  log,
+  afterImport: () => reminders && reminders.check()
+});
+
+const CLEAR_PERIOD_NAMES = { day: 'Day', week: 'Week', month: 'Month' };
 
 const reminderWhen = evt => `${evt.date ? formatDayLabel(evt.date) : ''}${evt.time ? `, ${evt.time}` : ''}`;
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -155,6 +171,32 @@ const handlers = {
     state.historyFilter = { ...state.historyFilter, ...patch };
     render();
   },
+  /** Hide reminders in the range from the calendar; Home keeps them. Throws on a bad range. */
+  /** The day, week or month on screen, and how many reminders Clear calendar would clear there. */
+  clearPeriod() {
+    const period = calendarPeriod(state.view, state.cursor);
+    return { ...period, count: countOnCalendar(state.events, period) };
+  },
+  /** Hide the reminders of that period from the calendar; Home keeps them. */
+  onClearCalendar(period) {
+    const { events, count } = hideFromCalendar(state.events, period);
+    if (!count) {
+      showBanner('Nothing to clear', `No reminders on the calendar for ${period.label}.`);
+      return;
+    }
+    state.openId = null;
+    state.openDay = null;
+    const title = `Cleared ${plural(count, 'reminder')} from ${period.label}`;
+    log('clear', 'calendar', title, '', `${CLEAR_PERIOD_NAMES[period.view] || 'Period'}: ${period.label}`);
+    return runWithToast({
+      busy: `Clearing ${plural(count, 'reminder')} from ${period.label}…`,
+      done: title,
+      body: 'They are still on Home. Open a client and pick Add to calendar to bring them back.',
+      failed: 'Could not clear the calendar'
+    }, () => commit(events));
+  },
+  /** A History import entry: import its kept file again. */
+  onReimport: entry => imports.reimport(entry),
   onClientStatus(clientName, status) {
     const known = handlers.onClientLookup(clientName);
     commit(applyClientFields(state.events, clientName, { status }, new Date().toISOString()));
@@ -163,16 +205,27 @@ const handlers = {
     hooks.emit('status-change', { clientName, status, previous: known ? known.status : null });
   },
   onSaveMinutes(meeting, isNew) {
-    records.commit('meetings', isNew
-      ? [meeting, ...state.meetings]
-      : state.meetings.map(m => (m.id === meeting.id ? meeting : m)));
+    const forWhom = meeting.clientName ? ` for ${meeting.clientName}` : '';
     log(isNew ? 'minutes' : 'edit', 'minutes', meeting.title, meeting.clientName, isNew ? 'Saved minutes' : 'Edited minutes');
+    return runWithToast({
+      busy: `Saving minutes "${meeting.title}"${forWhom}…`,
+      done: `Minutes "${meeting.title}" saved${forWhom}`,
+      body: meeting.clientName ? 'They are on the client timeline too.' : '',
+      failed: 'Could not save the minutes'
+    }, () => records.commit('meetings', isNew
+      ? [meeting, ...state.meetings]
+      : state.meetings.map(m => (m.id === meeting.id ? meeting : m))));
   },
   onDeleteMinutes(meeting) {
     records.commit('meetings', state.meetings.filter(m => m.id !== meeting.id));
     log('delete', 'minutes', meeting.title, meeting.clientName, 'Deleted minutes');
   },
-  onOpenSettings: () => openSettings('ai'),
+  onOpenSettings: () => openSettings(),
+  /** Minutes → Back: the client the minutes were opened from. */
+  onBackToClient: name => hooks.emit('open-client', { name }),
+  /** Minutes without an own Groq key go through this Worker (js/groq.js). */
+  minutesWorker: () => ({ workerUrl: app.settings().workerUrl, user: currentUser }),
+  workerUrl: () => app.settings().workerUrl,
   onNotice: (title, body) => showBanner(title, body),
   /** Every reminder and every set of minutes goes; the History log stays. */
   async onClearAll() {
@@ -184,7 +237,13 @@ const handlers = {
     log('clear', 'data', `Cleared ${plural(counts.reminders, 'reminder')}, ${counts.meetings} minutes`);
     return counts;
   },
+  /** Home: a named client opens on the Client page; "(No client)" opens its reminder. */
   onOpenClient(client) {
+    if (client.key && views.has('client')) {
+      // Back on the client's page returns to Home.
+      hooks.emit('open-client', { name: client.name, from: 'home' });
+      return;
+    }
     const ref = client.nextReminder || client.latestReminder;
     if (ref) openReminder(ref.id);
   },
@@ -194,15 +253,20 @@ const handlers = {
   }
 };
 
-/** Show the change at once, then save only what changed to the backend. */
+const saveErrorText = err => `${err && err.message ? err.message : String(err)} Check your connection, then try again.`;
+
+/**
+ * Show the change at once, then save only what changed to the backend.
+ * @returns {Promise<void>} settles when the save is done (a failure is reported, not thrown)
+ */
 function commit(events) {
   const prev = state.events;
   state.events = events;
   render();
   hooks.emit('events-change', { prev, next: events });
-  if (!backend) return;
-  trackSave(backend.write(prev, events)).catch(err => {
-    showBanner('Could not save your change', err && err.message ? err.message : String(err));
+  if (!backend) return Promise.resolve();
+  return trackSave(backend.write(prev, events)).catch(err => {
+    reportError('Could not save your change', saveErrorText(err));
   });
 }
 
@@ -227,7 +291,7 @@ function render() {
     showView(state.view);
     feature.render(app, feature.section);
   } else if (state.view === 'dashboard') renderDashboard(state, handlers);
-  else if (state.view === 'history') renderHistory(state);
+  else if (state.view === 'history') renderHistory(state, handlers);
   else if (state.view === 'minutes') renderMinutes(state, handlers);
   else renderCalendar(state, handlers);
   renderPanel(state, handlers);
@@ -272,31 +336,6 @@ function goToToday() {
   render();
 }
 
-async function importFile(file) {
-  try {
-    const reader = await loadXlsx();
-    const result = importWorkbook(reader, await file.arrayBuffer(), {
-      selectedKey: state.selectedKey,
-      now: new Date()
-    });
-    if (!result.events.length) throw new Error(`No rows with a company name in "${result.sheetName}".`);
-
-    const merged = mergeImported(state.events, result.events);
-    const summary = importSummary(result, formatDayLabel(state.selectedKey), merged);
-    const first = result.events[0].date;
-    state.selectedKey = first;
-    state.cursor = fromDateKey(first);
-    commit(merged.events);
-    log('import', 'reminder', file.name, '', summary);
-    const located = locationsFromPhoneCount(result.events);
-    const notes = located ? [`${located} location${located === 1 ? '' : 's'} detected from phone numbers.`] : [];
-    showBanner(summary, notes.concat(result.warnings).join(' '));
-    if (reminders) reminders.check();
-  } catch (err) {
-    showBanner('Import failed', err.message);
-  }
-}
-
 /**
  * Swipe left/right on the calendar for next/previous. Touch and pen only, so
  * mouse text selection is untouched; CSS `touch-action: pan-y` leaves vertical
@@ -321,7 +360,9 @@ function bind() {
   document.querySelector('#next').addEventListener('click', () => move(1));
   document.querySelector('#today').addEventListener('click', goToToday);
   for (const view of VIEWS) {
-    document.querySelector(`#view-${view}`).addEventListener('click', () => setView(view));
+    // Minutes has no navbar button: the client profile's Add minutes opens it.
+    const button = document.querySelector(`#view-${view}`);
+    if (button) button.addEventListener('click', () => setView(view));
   }
   document.querySelector('#view-calendar').addEventListener('click', () => setView(state.calendarView));
   document.querySelector('#theme-toggle').addEventListener('click', toggleTheme);
@@ -340,7 +381,7 @@ function bind() {
   importBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', async () => {
     const [file] = fileInput.files;
-    if (file) await withBusy(importBtn, () => importFile(file));
+    if (file) await withBusy(importBtn, () => imports.importFile(file));
     fileInput.value = ''; // so picking the same file again still fires `change`
   });
   document.querySelector('#modal-close').addEventListener('click', closeModal);
@@ -350,10 +391,15 @@ function bind() {
   });
   bindBanner();
   bindForm(handlers);
+  // The reminder's date: the app's date picker (the value stays 'YYYY-MM-DD').
+  createDatePicker(document.querySelector('#event-form [name="date"]'), { label: 'Choose the reminder date' });
+  // Every select[data-picker] (statuses, Remind me, History filters) opens the app's menu.
+  installSelectMenus();
   bindDashboard(handlers);
   bindHistory(handlers);
   bindMinutes(handlers);
   bindSettings(handlers);
+  bindClearCalendar(handlers);
 
   document.querySelector('#event-form').addEventListener('submit', e => {
     e.preventDefault();
@@ -388,11 +434,12 @@ function bind() {
     if (e.key === 'Escape') {
       if (isAccountMenuOpen()) closeAccountMenu();
       else if (isSettingsOpen()) closeSettings();
+      else if (isClearCalendarOpen()) closeClearCalendar();
       else if (isModalOpen()) closeModal();
       else if (isPanelOpen()) closePanel();
       return;
     }
-    if (isModalOpen() || isSettingsOpen()) return;
+    if (isModalOpen() || isSettingsOpen() || isClearCalendarOpen()) return;
     if (e.target.matches('input, textarea, select')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
@@ -404,7 +451,6 @@ function bind() {
     else if (key === 'd') setView('day');
     else if (key === 'w') setView('week');
     else if (key === 'm') setView('month');
-    else if (key === 'n') setView('minutes');
     else if (key === 'l') setView('history');
     else if (views.byKey(key)) setView(views.byKey(key).id);
   });
@@ -478,6 +524,7 @@ function signInError(err) {
 
 function startCloud() {
   const fb = connectFirebase(firebaseSdk, FIREBASE_CONFIG);
+  cloudDb = fb.db;
   let unsubscribe = null;
 
   const signIn = e => withBusy(e.currentTarget, () => fb.signIn())
@@ -526,6 +573,8 @@ const app = {
   store,
   get state() { return state; },
   get user() { return currentUser; },
+  /** Firestore once cloud mode has started; null in local mode. */
+  db: () => cloudDb,
   /** Saves reach a backend: local mode, or signed in. */
   canSave: () => mode === 'local' || Boolean(currentUser),
   /** Business settings (settings/app) over the .env Worker URL over the defaults. */
@@ -544,6 +593,13 @@ const app = {
   setView,
   openReminder,
   commitEvents: events => commit(events),
+  /** A client's status, as the Home table's Status menu sets it (logged, hooks told). */
+  setClientStatus: (name, status) => handlers.onClientStatus(name, status),
+  /** Client page → Minutes, with the client filled in. */
+  openMinutes(clientName) {
+    prefillMinutes(clientName);
+    setView('minutes');
+  },
   log,
   notify: (title, body = '') => showBanner(title, body)
 };

@@ -1,6 +1,7 @@
 // CladFlo Worker (Cloudflare): the server side of the AI and email features,
 // so the Groq and Resend keys never reach a browser.
 //
+//   POST /ai/chat        {model, messages, json}   → {content}  (Minutes, with the Worker's Groq key)
 //   POST /ai/actions     {text, client}            → {summary, actionItems: [{task, owner, due}]}
 //   POST /ai/followup    {client, text, actionItems, tone} → {subject, body}
 //   POST /ai/transcribe  multipart "file" (audio)  → {text}
@@ -8,9 +9,12 @@
 //
 // Every request must come from an allowed origin (ALLOWED_ORIGINS) and carry
 // either a Firebase ID token (Authorization: Bearer, verified against Google's
-// keys for FIREBASE_PROJECT_ID) or the shared X-App-Token (APP_TOKEN, for
-// local mode). Each caller gets RATE_LIMIT_PER_MINUTE requests a minute.
-// Secrets (wrangler secret put): GROQ_API_KEY, APP_TOKEN, RESEND_API_KEY.
+// keys for FIREBASE_PROJECT_ID) whose verified email is in ALLOWED_EMAILS, or
+// the shared X-App-Token (APP_TOKEN, for local mode). Anyone can sign in to a
+// Firebase project, so the email list is what keeps strangers off your Groq key.
+// Each caller gets RATE_LIMIT_PER_MINUTE requests a minute.
+// Secrets (wrangler secret put): GROQ_API_KEY, APP_TOKEN, ALLOWED_EMAILS, RESEND_API_KEY.
+// See docs/worker-setup.md.
 
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_AUDIO_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
@@ -18,6 +22,11 @@ const RESEND_URL = 'https://api.resend.com/emails';
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 
 export const CHAT_MODEL = 'llama-3.3-70b-versatile';
+/** The models /ai/chat accepts: the two the Minutes settings offer. */
+export const CHAT_MODELS = [CHAT_MODEL, 'llama-3.1-8b-instant'];
+export const MAX_CHAT_MESSAGES = 20;
+/** All message contents together; a Minutes part is at most ~14,000. */
+export const MAX_CHAT_CHARS = 48000;
 export const AUDIO_MODEL = 'whisper-large-v3-turbo';
 export const MAX_TEXT_CHARS = 30000;
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024; // Groq's limit on the free tier
@@ -82,10 +91,10 @@ export function resetKeyCache() {
 }
 
 /**
- * A Firebase ID token's user id, after checking its signature (RS256 with one
+ * A Firebase ID token's claims, after checking its signature (RS256 with one
  * of Google's current keys), audience, issuer and times. Throws 401 otherwise.
  */
-export async function verifyFirebaseToken(token, projectId, { fetchImpl = fetch, now = Date.now() } = {}) {
+export async function verifyFirebaseClaims(token, projectId, { fetchImpl = fetch, now = Date.now() } = {}) {
   const parts = String(token).split('.');
   if (parts.length !== 3 || !projectId) throw new HttpError(401, 'Sign in again.');
   let header;
@@ -111,7 +120,27 @@ export async function verifyFirebaseToken(token, projectId, { fetchImpl = fetch,
     !(claims.iat <= seconds + 60)) {
     throw new HttpError(401, 'Sign in again.');
   }
-  return claims.sub;
+  return claims;
+}
+
+/** A Firebase ID token's user id; see verifyFirebaseClaims. */
+export async function verifyFirebaseToken(token, projectId, deps) {
+  return (await verifyFirebaseClaims(token, projectId, deps)).sub;
+}
+
+/** ALLOWED_EMAILS: any number of addresses, split by commas, spaces or new lines; lower case. */
+export function allowedEmails(env) {
+  return String(env.ALLOWED_EMAILS || '').split(/[\s,;]+/).map(e => e.trim().toLowerCase()).filter(Boolean);
+}
+
+/** Throws 403 unless the token's email is verified and on the list. An empty list lets nobody in. */
+export function checkEmailAllowed(claims, env) {
+  const list = allowedEmails(env);
+  if (!list.length) throw new HttpError(403, 'The Worker has no ALLOWED_EMAILS yet, so no account may use it.');
+  const email = String(claims.email || '').trim().toLowerCase();
+  if (!email || claims.email_verified !== true || !list.includes(email)) {
+    throw new HttpError(403, 'This account may not use the CladFlo Worker. Ask the owner to add your email.');
+  }
 }
 
 /** Constant-time comparison, so the app token can't be guessed byte by byte. */
@@ -123,10 +152,14 @@ function sameSecret(a, b) {
   return diff === 0;
 }
 
-/** Who is calling: 'uid:<uid>' or 'token'. Throws 401. */
+/** Who is calling: 'uid:<uid>' or 'token'. Throws 401, or 403 for an email not on the list. */
 async function identify(request, env, deps) {
   const bearer = (request.headers.get('Authorization') || '').match(/^Bearer\s+(.+)$/i);
-  if (bearer) return `uid:${await verifyFirebaseToken(bearer[1].trim(), env.FIREBASE_PROJECT_ID, deps)}`;
+  if (bearer) {
+    const claims = await verifyFirebaseClaims(bearer[1].trim(), env.FIREBASE_PROJECT_ID, deps);
+    checkEmailAllowed(claims, env);
+    return `uid:${claims.sub}`;
+  }
   const appToken = request.headers.get('X-App-Token');
   if (appToken && env.APP_TOKEN && sameSecret(appToken, env.APP_TOKEN)) return 'token';
   throw new HttpError(401, 'Sign in, or enter the Worker access token in the AI panel.');
@@ -157,18 +190,28 @@ export function checkRateLimit(caller, limit, now = Date.now()) {
 
 // ---------- Groq ----------
 
-async function groqChat(env, deps, messages) {
+/** One Groq chat completion with the Worker's key; the reply text. */
+async function groqText(env, deps, { model = CHAT_MODEL, messages, json = true }) {
   if (!env.GROQ_API_KEY) throw new HttpError(503, 'The Worker has no GROQ_API_KEY yet.');
+  const body = { model, temperature: 0.2, messages };
+  if (json) body.response_format = { type: 'json_object' };
   const res = await deps.fetchImpl(GROQ_CHAT_URL, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: CHAT_MODEL, temperature: 0.2, response_format: { type: 'json_object' }, messages })
+    body: JSON.stringify(body)
   });
   if (res.status === 429) throw new HttpError(429, 'The AI is busy. Try again in a minute.', { 'Retry-After': res.headers.get('Retry-After') || '60' });
   if (!res.ok) throw new HttpError(502, `The AI failed (${res.status}). Try again.`);
   const data = await res.json();
+  const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof content !== 'string') throw new HttpError(502, 'The AI sent an empty answer. Try again.');
+  return content;
+}
+
+async function groqChat(env, deps, messages) {
+  const content = await groqText(env, deps, { messages });
   try {
-    return JSON.parse(data.choices[0].message.content);
+    return JSON.parse(content);
   } catch (err) {
     throw new HttpError(502, 'The AI sent an unreadable answer. Try again.');
   }
@@ -200,6 +243,31 @@ function requireText(body) {
   if (!text) throw new HttpError(400, 'Send the notes or transcript as "text".');
   if (text.length > MAX_TEXT_CHARS) throw new HttpError(413, `Keep the text under ${MAX_TEXT_CHARS} characters.`);
   return text;
+}
+
+const CHAT_ROLES = ['system', 'user', 'assistant'];
+
+/** Check an /ai/chat body: a known model, 1–20 plain messages, capped in size. */
+export function readChatBody(body) {
+  const model = body && body.model !== undefined ? body.model : CHAT_MODEL;
+  if (!CHAT_MODELS.includes(model)) throw new HttpError(400, `Use one of these models: ${CHAT_MODELS.join(', ')}.`);
+  const list = body && body.messages;
+  if (!Array.isArray(list) || !list.length) throw new HttpError(400, 'Send the chat as "messages".');
+  if (list.length > MAX_CHAT_MESSAGES) throw new HttpError(413, `Send at most ${MAX_CHAT_MESSAGES} messages.`);
+  const messages = list.map(m => {
+    if (!m || !CHAT_ROLES.includes(m.role) || typeof m.content !== 'string') {
+      throw new HttpError(400, 'Each message needs a role (system, user or assistant) and text content.');
+    }
+    return { role: m.role, content: m.content };
+  });
+  const chars = messages.reduce((sum, m) => sum + m.content.length, 0);
+  if (chars > MAX_CHAT_CHARS) throw new HttpError(413, `Keep the messages under ${MAX_CHAT_CHARS} characters in all.`);
+  return { model, messages, json: Boolean(body.json) };
+}
+
+async function aiChat(request, env, deps) {
+  const chat = readChatBody(await readJson(request));
+  return json({ content: await groqText(env, deps, chat) });
 }
 
 async function aiActions(request, env, deps) {
@@ -287,7 +355,7 @@ async function notify(request, env, deps) {
   return json({ sent: true }, 202);
 }
 
-const ROUTES = { '/ai/actions': aiActions, '/ai/followup': aiFollowup, '/ai/transcribe': aiTranscribe, '/notify': notify };
+const ROUTES = { '/ai/chat': aiChat, '/ai/actions': aiActions, '/ai/followup': aiFollowup, '/ai/transcribe': aiTranscribe, '/notify': notify };
 
 /** The whole Worker; deps.fetchImpl and deps.now are swapped in by the tests. */
 export async function handle(request, env, deps = {}) {

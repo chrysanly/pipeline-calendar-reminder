@@ -10,14 +10,16 @@ export function eventDateTime(evt) {
 }
 
 /**
- * Events whose reminder moment has arrived and that have not been notified yet.
+ * Events whose reminder moment has arrived and that have not been notified yet
+ * (or cleared from the calendar).
  * Events more than a day past their start are skipped (stale after reload).
  */
 export function dueReminders(events, now = new Date()) {
   const nowMs = now.getTime();
   const staleMs = 24 * 60 * 60 * 1000;
   return events.filter(evt => {
-    if (evt.notified) return false;
+    // Cleared from the calendar: no popup either.
+    if (evt.notified || evt.calendarHidden) return false;
     const when = eventDateTime(evt);
     if (!when) return false;
     const remindAt = when.getTime() - (Number(evt.reminderMinutesBefore) || 0) * 60000;

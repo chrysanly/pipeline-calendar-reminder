@@ -22,12 +22,19 @@ const MINUTES = {
 async function expectFits(page, scope) {
   const report = await page.evaluate(scope => {
     const problems = [];
+    // The phone nav with 5+ pages scrolls sideways, so its later buttons may sit past the edge.
+    const inScroller = node => {
+      for (let p = node.parentElement; p; p = p.parentElement) {
+        if (/(auto|scroll)/.test(getComputedStyle(p).overflowX)) return true;
+      }
+      return false;
+    };
     const controls = [...document.querySelectorAll(`${scope} button, ${scope} input:not([type="file"]), ${scope} select, ${scope} textarea, .topbar button`)];
     for (const node of controls) {
       const r = node.getBoundingClientRect();
       if (!r.width || !r.height) continue;
       const name = node.id || node.getAttribute('aria-label') || node.name || node.textContent.trim();
-      if (r.left < -0.5 || r.right > innerWidth + 0.5) problems.push(`${name} is off screen sideways`);
+      if ((r.left < -0.5 || r.right > innerWidth + 0.5) && !inScroller(node)) problems.push(`${name} is off screen sideways`);
       if (r.width < 43.5 || r.height < 43.5) problems.push(`${name} is only ${Math.round(r.width)}×${Math.round(r.height)}`);
     }
     return { problems, scrollWidth: document.documentElement.scrollWidth, innerWidth, checked: controls.length };
@@ -47,9 +54,10 @@ async function open(page) {
   await openApp(page);
 }
 
-test('all six views and the gear fit the top bar', async ({ page }) => {
+test('every view and the gear fit the top bar (Minutes has no button)', async ({ page }) => {
   await open(page);
-  for (const view of ['dashboard', 'day', 'week', 'month', 'minutes', 'history']) {
+  await expect(page.locator('#view-minutes')).toHaveCount(0);
+  for (const view of ['dashboard', 'day', 'week', 'month', 'history']) {
     await expect(page.locator(`#view-${view}`)).toBeVisible();
   }
   await expect(page.locator('#settings-btn')).toBeVisible();
@@ -59,7 +67,9 @@ test('all six views and the gear fit the top bar', async ({ page }) => {
 test('Minutes: the form, the generated minutes and the saved list fit the screen', async ({ page }) => {
   page.on('dialog', dialog => dialog.accept());
   await open(page);
-  await page.locator('#view-minutes').click();
+  // The client profile's Add minutes opens it; here, the saved page after a reload.
+  await page.evaluate(() => localStorage.setItem('view', 'minutes'));
+  await page.reload();
   await expect(page.locator('#minutes')).toBeVisible();
   await expectFits(page, '#minutes');
   if (test.info().project.name !== 'tablet') await expect(page.locator('#add-event'), 'the floating + would cover the form').toBeHidden();

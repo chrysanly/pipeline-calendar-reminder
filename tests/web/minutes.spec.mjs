@@ -1,5 +1,6 @@
 // Minutes view against a mocked Groq (page.route): generate, edit, save, copy,
 // delete, the 3-part flow and a 429 that succeeds on retry. Local mode.
+// Also Minutes through a mocked CladFlo Worker (/ai/chat) when there is no key.
 
 import { test, expect } from './fixtures.mjs';
 import { openApp, goToView } from './helpers.mjs';
@@ -32,15 +33,39 @@ async function mockGroq(page, { first = null, holdSecond = null } = {}) {
   return requests;
 }
 
-async function open(page, { key = KEY } = {}) {
-  await page.addInitScript(key => {
-    if (key && !sessionStorage.getItem('__key_set')) {
-      localStorage.setItem('cladflo.groq-key.v1', key);
-      sessionStorage.setItem('__key_set', '1');
-    }
-  }, key);
+const WORKER = 'https://cladflo-test.example.workers.dev';
+
+/**
+ * Mock the Worker's /ai/chat like mockGroq: JSON requests get MINUTES, others
+ * "notes N". `status`/`error` answer every request with that error instead.
+ */
+async function mockWorkerChat(page, { status = 200, error = '' } = {}) {
+  const requests = [];
+  await page.route(`${WORKER}/ai/chat`, route => {
+    const req = route.request();
+    const body = req.postDataJSON();
+    requests.push({ body, headers: req.headers() });
+    if (status !== 200) return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ error }) });
+    const content = body.json ? JSON.stringify(MINUTES) : `notes ${requests.length}`;
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ content }) });
+  });
+  return requests;
+}
+
+/** key: this browser's Groq key; workerUrl: Settings → Business; token: the Worker access token (local mode). */
+async function open(page, { key = KEY, workerUrl = '', token = '' } = {}) {
+  await page.addInitScript(({ key, workerUrl, token }) => {
+    if (sessionStorage.getItem('__key_set')) return;
+    if (key) localStorage.setItem('cladflo.groq-key.v1', key);
+    if (workerUrl) localStorage.setItem('client-calendar.settings.v1', JSON.stringify([{ id: 'app', workerUrl }]));
+    if (token) localStorage.setItem('cladflo.worker-token.v1', token);
+    sessionStorage.setItem('__key_set', '1');
+  }, { key, workerUrl, token });
   await openApp(page);
-  await page.keyboard.press('n');
+  // No navbar button any more (the client profile's Add minutes opens it):
+  // come back to the saved Minutes page, as after a reload.
+  await page.evaluate(() => localStorage.setItem('view', 'minutes'));
+  await page.reload();
   await expect(page.locator('#minutes')).toBeVisible();
   page.on('dialog', dialog => dialog.accept());
 }
@@ -55,16 +80,16 @@ async function generate(page, transcript, client = 'Acme Ltd.') {
 
 const stored = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem(k) || '[]'), key);
 
-test('the Minutes button and the N key open the view; the calendar is hidden', async ({ page }) => {
+test('Minutes has no navbar button or N key; on it the calendar is hidden', async ({ page }) => {
   await open(page);
-  await expect(page.locator('#view-minutes')).toHaveClass(/is-active/);
+  await expect(page.locator('#view-minutes')).toHaveCount(0);
   await expect(page.locator('.calendar')).toBeHidden();
   await expect(page.locator('.nav')).toBeHidden();
+  await expect(page.locator('#saved-minutes')).toContainText('No saved minutes yet.');
   await goToView(page, 'month');
   await expect(page.locator('#minutes')).toBeHidden();
-  await page.locator('#view-minutes').click();
-  await expect(page.locator('#minutes')).toBeVisible();
-  await expect(page.locator('#saved-minutes')).toContainText('No saved minutes yet.');
+  await page.locator('body').press('n');
+  await expect(page.locator('#minutes')).toBeHidden();
 });
 
 test('with no key, Generate asks for one and opens AI settings; nothing is sent', async ({ page }) => {
@@ -186,4 +211,54 @@ test('saved minutes: Copy puts the text on the clipboard; Delete removes them an
   expect(await stored(page, 'client-calendar.meetings.v1')).toEqual([]);
   await page.keyboard.press('l');
   await expect(page.locator('#history-list .history-item').first()).toContainText('Deleted minutes');
+});
+
+// ---------- through the CladFlo Worker (no key in this browser) ----------
+
+test('no key but a Worker URL: the minutes come from the Worker, with the access token and no Groq call', async ({ page }) => {
+  const groq = await mockGroq(page);
+  const worker = await mockWorkerChat(page);
+  await open(page, { key: '', workerUrl: WORKER, token: 'local-token' });
+  await generate(page, 'Anna: we renew for 12 months.');
+  await expect(page.locator('#minutes-edit [name="title"]')).toHaveValue('Renewal kickoff');
+  expect(groq).toHaveLength(0);
+  expect(worker).toHaveLength(1);
+  expect(worker[0].headers['x-app-token']).toBe('local-token');
+  expect(worker[0].body.model).toBe('llama-3.3-70b-versatile');
+  expect(worker[0].body.json).toBe(true);
+  await expect(page.locator('#minutes-open-settings')).toBeHidden();
+
+  await page.locator('#settings-btn').click();
+  await expect(page.locator('#groq-key-state')).toContainText('Using CladFlo Worker, no key needed');
+});
+
+test('an own key still wins over the Worker', async ({ page }) => {
+  const groq = await mockGroq(page);
+  const worker = await mockWorkerChat(page);
+  await open(page, { workerUrl: WORKER, token: 'local-token' });
+  await generate(page, 'Anna: hello');
+  expect(groq).toHaveLength(1);
+  expect(worker).toHaveLength(0);
+  await page.locator('#settings-btn').click();
+  await expect(page.locator('#groq-key-state')).toContainText('Saved in this browser');
+});
+
+test('the Worker refusing the account shows its reason and offers AI settings', async ({ page }) => {
+  const reason = 'This account may not use the CladFlo Worker. Ask the owner to add your email.';
+  const worker = await mockWorkerChat(page, { status: 403, error: reason });
+  await open(page, { key: '', workerUrl: WORKER, token: 'local-token' });
+  await page.locator('#minutes-transcript').fill('Anna: hello');
+  await page.locator('#minutes-generate').click();
+  await expect(page.locator('#minutes-progress')).toHaveText(reason);
+  await expect(page.locator('#minutes-open-settings')).toBeVisible();
+  expect(worker).toHaveLength(1);
+});
+
+test('no key, a Worker URL but no sign-in or access token: it says so and sends nothing', async ({ page }) => {
+  const worker = await mockWorkerChat(page);
+  await open(page, { key: '', workerUrl: WORKER });
+  await page.locator('#minutes-transcript').fill('Anna: hello');
+  await page.locator('#minutes-generate').click();
+  await expect(page.locator('#minutes-progress')).toHaveText('Sign in to use the CladFlo Worker, or add your own Groq key in AI settings.');
+  expect(worker).toHaveLength(0);
 });

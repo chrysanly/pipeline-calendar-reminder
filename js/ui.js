@@ -4,7 +4,7 @@ import {
   getMonthGrid, getWeekDays, formatRangeLabel, formatDayLabel, weekdayNames,
   toDateKey, eventsSortedByTime, CALENDAR_VIEWS
 } from './calendar.js';
-import { groupByDate, findEvent, STATUSES, STATUS_LABELS } from './storage.js';
+import { groupByDate, findEvent, calendarEvents, STATUSES, STATUS_LABELS } from './storage.js';
 import { COUNTRY_NAMES, locationFromPhone } from './phone-location.js';
 
 export const $ = sel => document.querySelector(sel);
@@ -169,6 +169,8 @@ function renderChip(evt, handlers) {
     mark.title = 'Imported from Excel';
     time.appendChild(mark);
   }
+  // Imported again as a new row (importer.js): the Home badge, on the calendar too.
+  if (evt.duplicate) time.appendChild(el('span', 'dup-badge chip-dup', 'Duplicate'));
   chip.appendChild(time);
 
   const title = el('button', 'chip-title', evt.title);
@@ -244,7 +246,8 @@ export function renderCalendar(state, handlers) {
   renderHeader(view, cells);
 
   const compact = isCompact();
-  const byDate = groupByDate(events);
+  // Reminders cleared from the calendar stay on Home only.
+  const byDate = groupByDate(calendarEvents(events));
   const grid = $('#grid');
   grid.innerHTML = '';
   grid.className = `grid view-${view}`;
@@ -291,7 +294,7 @@ export function renderPanel(state, handlers) {
 }
 
 function renderDayList(state, list, handlers) {
-  const dayEvents = eventsSortedByTime(groupByDate(state.events).get(state.openDay) || []);
+  const dayEvents = eventsSortedByTime(groupByDate(calendarEvents(state.events)).get(state.openDay) || []);
   $('#day-label').textContent = `${formatDayLabel(state.openDay)} · ${dayEvents.length} reminder${dayEvents.length === 1 ? '' : 's'}`;
   const chips = el('div', 'day-list');
   for (const evt of dayEvents) chips.appendChild(renderChip(evt, handlers));
@@ -462,31 +465,4 @@ function statusBadge(status) {
   const badge = el('span', `status-badge status-${status}`);
   badge.append(icon(STATUS_ICONS[status]), STATUS_LABELS[status]);
   return badge;
-}
-
-let bannerTimer = null;
-let bannerOpen = null;
-
-/** In-app toast: "Hey you have a …" plus the reminder details. */
-export function showBanner(title, body, onOpen) {
-  const banner = $('#banner');
-  $('#banner-title').textContent = title;
-  $('#banner-body').textContent = body || '';
-  bannerOpen = onOpen || null;
-  banner.hidden = false;
-  clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(hideBanner, 30000);
-}
-
-export function hideBanner() {
-  clearTimeout(bannerTimer);
-  $('#banner').hidden = true;
-}
-
-export function bindBanner() {
-  $('#banner-close').addEventListener('click', hideBanner);
-  $('#banner-title').addEventListener('click', () => {
-    if (bannerOpen) bannerOpen();
-    hideBanner();
-  });
 }

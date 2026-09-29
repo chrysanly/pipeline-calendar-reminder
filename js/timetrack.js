@@ -8,7 +8,9 @@ import { clientKey } from './storage.js';
 import { parseAmount } from './deals.js';
 import { CURRENCIES } from './store.js';
 
-export const EXPENSE_CATEGORIES = ['Travel', 'Meals', 'Software', 'Materials', 'Subcontractor', 'Other'];
+// Invoice types (shown as "Invoices" on the Client page; stored in the `expenses`
+// collection, so earlier entries keep working).
+export const EXPENSE_CATEGORIES = ['Services', 'Consulting', 'Retainer', 'Software', 'Materials', 'Subcontractor', 'Other'];
 
 /** Longest single session: 24 hours. */
 export const MAX_SESSION_MINUTES = 24 * 60;
@@ -113,7 +115,7 @@ export function validateExpense(input, fallbackCurrency = 'AED') {
   const currency = ttText(input.currency || fallbackCurrency).toUpperCase();
   if (!CURRENCIES.includes(currency)) errors.currency = 'Pick a currency from the list.';
   const date = ttText(input.date);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || toDateKey(fromDateKey(date)) !== date) errors.date = 'Pick the date of the expense.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || toDateKey(fromDateKey(date)) !== date) errors.date = 'Pick the date of the invoice.';
   const category = EXPENSE_CATEGORIES.includes(input.category) ? input.category : 'Other';
   if (Object.keys(errors).length) return { expense: null, errors };
   return { expense: { date, amount, currency, category, note: ttText(input.note).slice(0, 500) }, errors };

@@ -63,8 +63,8 @@ test('no client yet: a chooser of every client; picking one opens the profile', 
   const errors = await openClientPage(page, { client: '' });
   await expect(page.locator('#view-client')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.client-profile')).toBeHidden();
-  await expect(page.locator('.client-chooser button')).toHaveText(['Acme Ltd.', 'Falcon Trading']);
-  await page.locator('.client-chooser button', { hasText: 'Falcon Trading' }).click();
+  await expect(page.locator('#clients-table .client-row:not(.client-head) .client-name')).toHaveText(['Acme Ltd.', 'Falcon Trading']);
+  await page.locator('#clients-table .client-name', { hasText: 'Falcon Trading' }).click();
   await expect(page.locator('.profile-name')).toHaveText('Falcon Trading');
   await expect(page.locator('.client-empty')).toBeHidden();
   expect(errors).toEqual([]);
@@ -106,21 +106,21 @@ test('the filter chips narrow the timeline; Open shows the reminder', async ({ p
   await expect(page.locator('#panel')).toContainText('Renewal call');
 });
 
-test('notes are added to the top of the timeline, saved on the client, and can be deleted', async ({ page }) => {
+test('comments are added to the top of the timeline, saved on the client, and can be deleted', async ({ page }) => {
   await openClientPage(page);
-  const note = page.getByLabel('New note');
+  const note = page.getByLabel('New comment');
   await page.locator('.note-form button[type="submit"]').click();
-  await expect(page.locator('.note-form .form-status')).toHaveText('Write the note first.');
+  await expect(page.locator('.note-form .form-status')).toHaveText('Write the comment first.');
   await note.fill('Prefers WhatsApp over email');
   await page.locator('.note-form button[type="submit"]').click();
-  await expect(page.locator('.note-form .form-status')).toHaveText('Note added.');
+  await expect(page.locator('.note-form .form-status')).toHaveText('Comment added.');
   await expect(note).toHaveValue('');
   await expect(timeline(page).nth(1).locator('.timeline-detail')).toHaveText('Prefers WhatsApp over email');
   const [profile] = await stored(page, 'clients');
   expect(profile).toMatchObject({ key: 'acme ltd.', name: 'Acme Ltd.' });
   expect(profile.notes.map(n => n.text)).toEqual(['Prefers WhatsApp over email']);
 
-  await page.getByRole('button', { name: 'Delete note' }).click();
+  await page.getByRole('button', { name: 'Delete comment' }).click();
   await expect(page.locator('.kind-note')).toHaveCount(0);
   expect((await stored(page, 'clients'))[0].notes).toEqual([]);
 });

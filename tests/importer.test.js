@@ -1,8 +1,9 @@
 import { test, assert, assertEqual, assertDeepEqual } from './runner.js';
 import {
   findColumns, extractDateTime, rowsToEvents, mergeImported, importSummary,
-  statusFromCell, locationsFromPhoneCount
+  statusFromCell, locationsFromPhoneCount, mergeImportedAsync
 } from '../js/importer.js';
+import { hideFromCalendar } from '../js/storage.js';
 
 const SEL = '2026-09-27';
 const at = (text, time = '10:00') => extractDateTime(text, SEL, time);
@@ -174,13 +175,28 @@ test('mergeImported adds new reminders with ids and no helper flags', () => {
   assert(merged.events.every(e => !('dateFound' in e) && !('timeFound' in e)));
 });
 
-test('mergeImported: importing twice does not duplicate', () => {
+test('mergeImported: uploading again adds each row once more, marked duplicate with its own key', () => {
+  const first = mergeImported([], rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
+  assert(first.events.every(e => !e.duplicate), 'the first upload has no duplicates');
+  const again = mergeImported(first.events, rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
+  assertDeepEqual([again.added, again.duplicates, again.updated], [0, 3, 0]);
+  assertEqual(again.events.length, 6);
+  const copies = again.events.filter(e => e.duplicate);
+  assertEqual(copies.length, 3);
+  assertDeepEqual(copies.map(e => e.importKey), first.events.map(e => `${e.importKey}#1`));
+  const third = mergeImported(again.events, rowsToEvents(ROWS.slice(0, 1), { selectedKey: SEL, now: NOW }).events);
+  assertEqual(third.events.at(-1).importKey, `${first.events[0].importKey}#2`, 'every copy gets a key of its own');
+  assertEqual(new Set(third.events.map(e => e.id)).size, third.events.length);
+});
+
+test('mergeImported with reimport (History): rows already there are updated, not duplicated', () => {
   const first = mergeImported([{ id: 'own', title: 'Mine', date: SEL, time: '09:00' }],
     rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
   const laterNow = new Date(2026, 8, 27, 16, 40);
   // Second import from a different selected day and later time.
-  const again = mergeImported(first.events, rowsToEvents(ROWS, { selectedKey: '2026-10-05', now: laterNow }).events);
+  const again = mergeImported(first.events, rowsToEvents(ROWS, { selectedKey: '2026-10-05', now: laterNow }).events, { reimport: true });
   assertEqual(again.added, 0);
+  assertEqual(again.duplicates, 0);
   assertEqual(again.updated, 3);
   assertEqual(again.events.length, 4);
   const rose = again.events.find(e => e.clientName === 'Desert Rose');
@@ -193,13 +209,16 @@ test('importSummary reports new and duplicate counts and where undated rows went
   const result = rowsToEvents(ROWS, { selectedKey: SEL, now: NOW });
   const first = mergeImported([], result.events);
   assertEqual(importSummary(result, 'Sun, 27 September 2026', first),
-    'Imported 3 reminders: 3 new, 0 duplicates (1 without a date → Sun, 27 September 2026, 1 skipped)');
-  // The same file again: every row is a duplicate.
+    'Imported 3 reminders: 3 new (1 without a date → Sun, 27 September 2026, 1 skipped)');
+  // The same file again: every row is added again as a duplicate.
   const again = mergeImported(first.events, rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
   assertEqual(importSummary(result, 'Sun, 27 September 2026', again),
-    'Imported 3 reminders: 0 new, 3 duplicates (1 without a date → Sun, 27 September 2026, 1 skipped)');
-  assertEqual(importSummary({ events: result.events.slice(0, 1), skipped: 0 }, 'X', { added: 0, updated: 1 }),
-    'Imported 1 reminder: 0 new, 1 duplicate (0 without a date → X, 0 skipped)');
+    'Imported 3 reminders: 0 new, 3 duplicates (added) (1 without a date → Sun, 27 September 2026, 1 skipped)');
+  assertEqual(importSummary({ events: result.events.slice(0, 1), skipped: 0 }, 'X', { added: 0, duplicates: 1 }),
+    'Imported 1 reminder: 0 new, 1 duplicate (added) (0 without a date → X, 0 skipped)');
+  // Re-import from History updates.
+  assertEqual(importSummary({ events: result.events.slice(0, 2), skipped: 0 }, 'X', { added: 1, updated: 1 }),
+    'Imported 2 reminders: 1 new, 1 updated (1 without a date → X, 0 skipped)');
 });
 
 // ---------- phone, location and status columns ----------
@@ -255,7 +274,7 @@ test('re-import keeps a status set by hand and only fills blank location fields'
   const first = mergeImported([], rowsToEvents(LOC_ROWS, { selectedKey: SEL, now: NOW }).events).events;
   // By hand: Mobile Only → inactive and a city.
   const edited = first.map(e => e.clientName === 'Mobile Only' ? { ...e, status: 'inactive', city: 'Al Ain', updatedAt: 'Z' } : e);
-  const again = mergeImported(edited, rowsToEvents(LOC_ROWS, { selectedKey: SEL, now: NOW }).events).events;
+  const again = mergeImported(edited, rowsToEvents(LOC_ROWS, { selectedKey: SEL, now: NOW }).events, { reimport: true }).events;
   const mobile = again.filter(e => e.clientName === 'Mobile Only');
   assertEqual(mobile.length, 1);
   assertEqual(mobile[0].status, 'inactive', 'the file says Active but the hand-set status wins');
@@ -281,3 +300,127 @@ test('merged reminders carry no import-only flags', () => {
   const { events } = mergeImported([], rowsToEvents(LOC_ROWS, { selectedKey: SEL, now: NOW }).events);
   assert(events.every(e => !('statusFound' in e) && !('locFromPhone' in e)));
 });
+
+// ---------- re-import and the chunked import ----------
+
+test('imported reminders start off the calendar (Home only); a hand-made one stays on it', () => {
+  const first = mergeImported([{ id: 'own', title: 'Mine', date: SEL, time: '09:00' }],
+    rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
+  assert(first.events.filter(e => e.source === 'import').every(e => e.calendarHidden));
+  assertEqual(first.events.find(e => e.id === 'own').calendarHidden, undefined);
+  const copies = mergeImported(first.events, rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
+  assert(copies.events.filter(e => e.duplicate).every(e => e.calendarHidden), 'duplicates start off it too');
+});
+
+test('re-import keeps each reminder where it is: on the calendar stays on, off stays off', () => {
+  const first = mergeImported([], rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events);
+  const falcon = first.events.find(e => e.clientName === 'Falcon Trading');
+  const shown = first.events.map(e => (e.id === falcon.id ? { ...e, calendarHidden: false } : e));
+  const again = mergeImported(shown, rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events, { reimport: true });
+  assertEqual(again.events.length, 3);
+  assertEqual(again.events.find(e => e.id === falcon.id).calendarHidden, undefined, 'still on the calendar');
+  assert(again.events.filter(e => e.id !== falcon.id).every(e => e.calendarHidden), 'the rest stay off it');
+  const cleared = hideFromCalendar(again.events, {}).events;
+  const afterClear = mergeImported(cleared, rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events, { reimport: true });
+  assert(afterClear.events.every(e => e.calendarHidden), 're-import no longer brings cleared reminders back');
+});
+
+const pendingImports = [];
+const later = (name, fn) => pendingImports.push(fn().then(() => test(name, () => {}), err => test(name, () => { throw err; })));
+
+// 120 rows, one company each, dated in October.
+const manyRows = Array.from({ length: 120 }, (_, i) =>
+  ({ Company: `Firm ${i}`, 'BD Notes': `Call on ${String(1 + (i % 28)).padStart(2, '0')}/10/2026` }));
+
+later('mergeImportedAsync reports n/total per chunk, pauses between chunks and matches mergeImported', async () => {
+  const rows = rowsToEvents(manyRows, { selectedKey: SEL, now: NOW }).events;
+  const progress = [];
+  let pauses = 0;
+  const merged = await mergeImportedAsync([], rows, {
+    chunkSize: 50,
+    onProgress: (done, total) => progress.push(`${done}/${total}`),
+    pause: async () => { pauses++; }
+  });
+  assertDeepEqual(progress, ['0/120', '50/120', '100/120', '120/120']);
+  assertEqual(pauses, 2);
+  const sync = mergeImported([], rows);
+  assertEqual(merged.added, 120);
+  assertEqual(merged.updated, 0);
+  assertDeepEqual(merged.events.map(e => [e.importKey, e.date]), sync.events.map(e => [e.importKey, e.date]));
+});
+
+later('mergeImportedAsync: duplicates across chunks, the default pause, and nothing to import', async () => {
+  const rows = rowsToEvents(ROWS, { selectedKey: SEL, now: NOW }).events;
+  const first = await mergeImportedAsync([], rows, { chunkSize: 1 });
+  const again = await mergeImportedAsync(first.events, rows, { chunkSize: 2, reimport: true });
+  assertEqual(again.added, 0);
+  assertEqual(again.updated, 3);
+  assertEqual(again.events.length, 3);
+  const copies = await mergeImportedAsync(first.events, rows, { chunkSize: 2 });
+  assertDeepEqual([copies.added, copies.duplicates, copies.updated, copies.events.length], [0, 3, 0, 6]);
+  const progress = [];
+  const empty = await mergeImportedAsync(first.events, [], { onProgress: (d, t) => progress.push(`${d}/${t}`) });
+  assertDeepEqual(progress, ['0/0']);
+  assertEqual(empty.events, first.events);
+});
+
+
+// ---------- every row kept (a 3867-row file shows 3867 rows) ----------
+
+const REPEATS = [
+  { Company: 'Acme', 'BD Notes': 'Call on 05/10/2026' },
+  { Company: 'Acme', 'BD Notes': 'Call on 05/10/2026' },
+  { Company: 'ACME ', 'BD Notes': 'Call on 09/10/2026' },
+  { Company: 'Falcon', 'BD Notes': 'no date' },
+  { Company: 'Falcon', 'BD Notes': 'still no date' }
+];
+
+test('an upload keeps every row: repeats of a company are added as duplicates with keys of their own', () => {
+  const rows = rowsToEvents(REPEATS, { selectedKey: SEL, now: NOW }).events;
+  const merged = mergeImported([], rows);
+  assertEqual(merged.events.length, 5, 'one reminder per row');
+  assertDeepEqual([merged.added, merged.duplicates, merged.updated], [2, 3, 0]);
+  assertDeepEqual(merged.events.map(e => [e.importKey, Boolean(e.duplicate)]), [
+    ['acme|2026-10-05', false], ['acme|2026-10-05#1', true], ['acme|2026-10-09', true],
+    ['falcon|undated', false], ['falcon|undated#1', true]
+  ]);
+});
+
+test('an upload marks a company that was already there (even added by hand) as a duplicate', () => {
+  const existing = [{ id: 'own', clientName: 'Falcon', title: 'Call', date: SEL, time: '09:00' }];
+  const merged = mergeImported(existing, rowsToEvents(REPEATS.slice(0, 1).concat(REPEATS[3]), { selectedKey: SEL, now: NOW }).events);
+  assertDeepEqual(merged.events.map(e => [e.clientName, Boolean(e.duplicate)]), [['Falcon', false], ['Acme', false], ['Falcon', true]]);
+});
+
+test('re-import updates row for row: the same file again adds nothing and keeps the duplicate marks', () => {
+  const rows = () => rowsToEvents(REPEATS, { selectedKey: SEL, now: NOW }).events;
+  const first = mergeImported([], rows());
+  const again = mergeImported(first.events, rows(), { reimport: true });
+  assertDeepEqual([again.added, again.duplicates, again.updated], [0, 0, 5]);
+  assertDeepEqual(again.events.map(e => e.id), first.events.map(e => e.id), 'the same reminders');
+  assertDeepEqual(again.events.map(e => Boolean(e.duplicate)), [false, true, true, false, true]);
+});
+
+test('re-import fills in the rows an older import merged away, as duplicates', () => {
+  // What an older version kept of REPEATS: one reminder per importKey.
+  const rows = rowsToEvents(REPEATS, { selectedKey: SEL, now: NOW }).events;
+  const collapsed = mergeImported([], [rows[0], rows[2], rows[3]]).events;
+  assertEqual(collapsed.length, 3);
+  const fixed = mergeImported(collapsed, rowsToEvents(REPEATS, { selectedKey: SEL, now: NOW }).events, { reimport: true });
+  assertEqual(fixed.events.length, 5);
+  assertDeepEqual([fixed.added, fixed.duplicates, fixed.updated], [0, 2, 3]);
+  assertEqual(new Set(fixed.events.map(e => e.importKey)).size, 5);
+});
+
+later('mergeImportedAsync keeps every row across chunks: 500 rows of 120 companies give 500 reminders', async () => {
+  const rows = Array.from({ length: 500 }, (_, i) => ({ Company: `Firm ${i % 120}`, 'BD Notes': `Call on ${String(1 + (i % 3)).padStart(2, '0')}/10/2026` }));
+  const events = rowsToEvents(rows, { selectedKey: SEL, now: NOW }).events;
+  const merged = await mergeImportedAsync([], events, { chunkSize: 50, pause: async () => {} });
+  assertEqual(merged.events.length, 500);
+  assertDeepEqual([merged.added, merged.duplicates], [120, 380]);
+  assertEqual(new Set(merged.events.map(e => e.importKey)).size, 500, 'every key unique, also across chunks');
+  const again = await mergeImportedAsync(merged.events, events, { chunkSize: 50, pause: async () => {}, reimport: true });
+  assertDeepEqual([again.events.length, again.updated, again.added + again.duplicates], [500, 500, 0]);
+});
+
+export const importerTestsDone = Promise.all(pendingImports);

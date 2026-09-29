@@ -64,9 +64,9 @@ test('clientSessions and totalMinutes: finished sessions of one client, newest f
 });
 
 test('validateExpense checks amount, currency and date; unknown categories become Other', () => {
-  const { expense, errors } = validateExpense({ date: '2026-09-26', amount: '1,200.50', currency: 'usd', category: 'Travel', note: ' Flight ' });
+  const { expense, errors } = validateExpense({ date: '2026-09-26', amount: '1,200.50', currency: 'usd', category: 'Services', note: ' Flight ' });
   assertDeepEqual(errors, {});
-  assertDeepEqual(expense, { date: '2026-09-26', amount: 1200.5, currency: 'USD', category: 'Travel', note: 'Flight' });
+  assertDeepEqual(expense, { date: '2026-09-26', amount: 1200.5, currency: 'USD', category: 'Services', note: 'Flight' });
   assertEqual(validateExpense({ date: '2026-09-26', amount: '10', category: 'Yacht' }, 'EUR').expense.category, 'Other');
   assertEqual(validateExpense({ date: '2026-09-26', amount: '10' }, 'EUR').expense.currency, 'EUR');
   const bad = validateExpense({ date: '2026-02-31', amount: '0', currency: 'BTC' });

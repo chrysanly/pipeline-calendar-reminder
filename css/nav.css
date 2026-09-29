@@ -220,8 +220,8 @@
 .page-sub { margin: 2px 0 0; color: var(--muted); }
 
 /* Nothing to add or import until Firebase says who you are. */
-body[data-auth="signed-out"] :is(#add-event, #import-btn),
-body[data-auth="loading"] :is(#add-event, #import-btn) { display: none; }
+body[data-auth="signed-out"] :is(#add-event, #import-btn, #clear-calendar-btn),
+body[data-auth="loading"] :is(#add-event, #import-btn, #clear-calendar-btn) { display: none; }
 
 /* Switching pages: a quick fade. Opacity only, so no containing block for the fixed + button. */
 :is(.dashboard, .page, .calendar):not([hidden]) { animation: page-in .2s var(--ease); }
@@ -245,7 +245,7 @@ body[data-auth="loading"] :is(#add-event, #import-btn) { display: none; }
   .user-name { display: none; }
 }
 
-/* ---------- phone (≤640px): brand + actions / the four pages ---------- */
+/* ---------- phone (≤640px): brand + actions / the pages ---------- */
 
 @media (max-width: 640px) {
   .topbar {
@@ -262,7 +262,7 @@ body[data-auth="loading"] :is(#add-event, #import-btn) { display: none; }
   .account-btn { padding-right: var(--sp-2); }
   .account-menu { position: fixed; top: calc(60px + env(safe-area-inset-top)); left: var(--sp-3); right: var(--sp-3); width: auto; }
 
-  /* The four pages: a full-width row, a small label under each icon. */
+  /* The pages: a full-width row, a small label under each icon (5+ scroll sideways, see styles.css). */
   .views { grid-row: 2; grid-column: 1 / -1; justify-self: stretch; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-radius: var(--radius-lg); }
   .views .btn-label { display: block; font-size: 11px; line-height: 1.2; }
   .views button { flex-direction: column; gap: 2px; min-width: 0; padding: 4px 2px; border-radius: var(--radius); }
@@ -278,8 +278,8 @@ body[data-auth="loading"] :is(#add-event, #import-btn) { display: none; }
 
   .page-title { font-size: var(--fs-xl); }
   .page-sub { display: none; }
-  #import-btn .btn-label { display: none; }
-  #import-btn { width: var(--tap); padding: 0; }
+  :is(#import-btn, #clear-calendar-btn) .btn-label { display: none; }
+  :is(#import-btn, #clear-calendar-btn) { width: var(--tap); padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

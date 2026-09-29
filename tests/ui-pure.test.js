@@ -1,6 +1,7 @@
 // Pure helpers exported by js/ui.js (importing it touches no DOM).
 
-import { test, assertEqual } from './runner.js';
+import { test, assert, assertEqual } from './runner.js';
+import { clearCalendarText } from '../js/clear-calendar-ui.js';
 import { swipeDirection } from '../js/ui.js';
 
 test('swipeDirection: a clear swipe left is next, right is previous', () => {
@@ -28,4 +29,13 @@ test('swipeDirection: exactly 60px sideways is not enough', () => {
   assertEqual(swipeDirection(-60, 0), 0);
   assertEqual(swipeDirection(60, 0), 0);
   assertEqual(swipeDirection(-60.5, 0), 1);
+});
+
+test('Clear calendar dialog text names the period, the count and that the other views lose them too', () => {
+  const day = clearCalendarText({ view: 'day', label: 'Sat, 3 Oct 2026', count: 4 });
+  assertEqual(day.title, 'Clear Sat, 3 Oct 2026');
+  assertEqual(day.count, '4 reminders on the calendar this day will be cleared.');
+  assert(day.warning.includes('Day, Week and Month views') && day.warning.includes('Home, your clients and all their data stay'));
+  assertEqual(clearCalendarText({ view: 'week', label: 'x', count: 1 }).count, '1 reminder on the calendar this week will be cleared.');
+  assertEqual(clearCalendarText({ view: 'month', label: 'x', count: 0 }).count, 'Nothing on the calendar this month: there is nothing to clear.');
 });

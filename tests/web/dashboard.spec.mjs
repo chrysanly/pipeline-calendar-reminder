@@ -168,9 +168,16 @@ test('changing a status on the dashboard updates the counts and every reminder o
   await expectCounts(page, { lead: 2, potential: 1, active: 0, inactive: 2 });
 });
 
-test('clicking a client opens the details panel for its next reminder', async ({ page }) => {
+/** Home → a client's page → one of its reminders in the details panel. */
+async function openClientReminder(page, name, title) {
+  await page.locator('.client-name', { hasText: name }).click();
+  await expect(page.locator('#page-client .profile-name')).toHaveText(name);
+  await page.locator('#page-client .timeline-item', { hasText: title }).locator('[data-action="open-reminder"]').click();
+}
+
+test('clicking a client opens its Client page; a reminder there opens the details panel', async ({ page }) => {
   await openHome(page);
-  await page.locator('.client-name', { hasText: 'Acme Ltd.' }).click();
+  await openClientReminder(page, 'Acme Ltd.', 'Renewal call');
   const panel = page.locator('#panel');
   await expect(panel).toBeVisible();
   await expect(panel.locator('.event-title')).toHaveText('Renewal call');
@@ -183,10 +190,12 @@ test('clicking a client opens the details panel for its next reminder', async ({
   await expect(panel.locator('.event-country')).toHaveText('United Arab Emirates');
   await expect(panel.locator('.event-country .fa-earth-asia')).toHaveCount(1);
 
-  // No upcoming reminder: the latest one opens instead.
+  // A client with no upcoming reminder opens on its page too.
   await page.locator('#panel-close').click();
+  await page.locator('#view-dashboard').click();
   await page.locator('.client-name', { hasText: 'Oasis Group' }).click();
-  await expect(panel.locator('.event-title')).toHaveText('Budget sign-off');
+  await expect(page.locator('#page-client .timeline-list')).toContainText('Budget sign-off');
+  await expect(panel).toBeHidden();
 });
 
 test('the counts follow adding and editing reminders in the form', async ({ page }) => {
@@ -198,7 +207,7 @@ test('the counts follow adding and editing reminders in the form', async ({ page
   await expect(page.locator('#modal')).toBeHidden();
   await expectCounts(page, { lead: 0, potential: 1, active: 0, inactive: 0 });
 
-  await page.locator('.client-name', { hasText: 'New Co' }).click();
+  await openClientReminder(page, 'New Co', 'Discovery call');
   await page.locator('#day-events .link', { hasText: 'Edit' }).click();
   await expect(page.locator('#event-form [name="status"]')).toHaveValue('potential');
   await page.locator('#event-form [name="status"]').selectOption('active');
@@ -297,7 +306,8 @@ test('with the details panel open on desktop, the client list turns into cards a
   // Wide enough for the table while the panel is closed.
   await expect(page.locator('.client-head')).toBeVisible();
 
-  await page.locator('.client-row[data-client="Acme Ltd."] .client-name').click();
+  await openClientReminder(page, 'Acme Ltd.', 'Renewal call');
+  await page.locator('#view-dashboard').click();
   await expect(page.locator('#panel')).toBeVisible();
   await expect(page.locator('.client-head')).toBeHidden();
 

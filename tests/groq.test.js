@@ -4,7 +4,7 @@ import { test, assert, assertEqual, assertDeepEqual, fakeStorage } from './runne
 import {
   GROQ_URL, GROQ_KEY_STORAGE, GROQ_MODELS, DEFAULT_MODEL, MAX_RETRIES,
   loadGroqKey, saveGroqKey, removeGroqKey, loadGroqModel, saveGroqModel, maskKey,
-  retryDelay, chatGroq, testGroqKey, chunkText
+  retryDelay, chatGroq, testGroqKey, chunkText, chatWorker, minutesSource, minutesChat
 } from '../js/groq.js';
 
 const KEY = 'gsk_test_0123456789abcd';
@@ -173,6 +173,88 @@ later('no key: chatGroq refuses before any request', async () => {
 later('testGroqKey resolves for a working key', async () => {
   const fetch = fakeFetch([answer('OK')]);
   assertEqual(await testGroqKey({ key: KEY, fetch }), true);
+});
+
+// ---------- Minutes through the CladFlo Worker ----------
+
+const WORKER = 'https://cladflo.example.workers.dev/';
+const workerAnswer = content => reply(200, { content });
+const noSleep = async () => {};
+
+test('minutesSource: an own key wins, else the Worker URL, else nothing', () => {
+  assertEqual(minutesSource({ key: KEY, workerUrl: WORKER }), 'key');
+  assertEqual(minutesSource({ key: '', workerUrl: WORKER }), 'worker');
+  assertEqual(minutesSource({ key: ' ', workerUrl: ' ' }), '');
+  assertEqual(minutesSource({}), '');
+});
+
+later('chatWorker posts the model, messages and JSON flag to /ai/chat with the ID token', async () => {
+  const calls = [];
+  const content = await chatWorker({
+    workerUrl: WORKER, auth: { idToken: 'id-token' }, model: 'llama-3.1-8b-instant', json: true,
+    messages: [{ role: 'user', content: 'hi' }],
+    fetch: async (url, init) => { calls.push({ url, init }); return workerAnswer('{"ok":true}'); }
+  });
+  assertEqual(content, '{"ok":true}');
+  assertEqual(calls[0].url, 'https://cladflo.example.workers.dev/ai/chat');
+  assertEqual(calls[0].init.headers.Authorization, 'Bearer id-token');
+  assertDeepEqual(JSON.parse(calls[0].init.body), { model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: 'hi' }], json: true });
+  assert(!JSON.stringify(calls[0].init).includes('gsk_'), 'no Groq key leaves the browser');
+});
+
+later('chatWorker uses the app token in local mode and refuses with no auth or no URL before any request', async () => {
+  const calls = [];
+  const fetch = async (url, init) => { calls.push(init); return workerAnswer('ok'); };
+  await chatWorker({ workerUrl: WORKER, auth: { appToken: 'local-token' }, messages: [], fetch });
+  assertEqual(calls[0].headers['X-App-Token'], 'local-token');
+  assertEqual(calls[0].headers.Authorization, undefined);
+  const failures = [];
+  for (const options of [{ workerUrl: WORKER, auth: {} }, { workerUrl: '', auth: { idToken: 't' } }]) {
+    try { await chatWorker({ ...options, messages: [], fetch }); } catch (err) { failures.push([err.status, err.message]); }
+  }
+  assertDeepEqual(failures, [
+    [401, 'Sign in to use the CladFlo Worker, or add your own Groq key in AI settings.'],
+    [0, 'Set the Worker URL in Settings → Business first.']
+  ]);
+  assertEqual(calls.length, 1);
+});
+
+later('chatWorker retries a busy Worker, shows its 403 reason at once, and gives up when unreachable', async () => {
+  const replies = [reply(429, { error: 'Too many requests.' }, { 'retry-after': '2' }), workerAnswer('done')];
+  const waits = [];
+  const ok = await chatWorker({ workerUrl: WORKER, auth: { idToken: 't' }, messages: [], fetch: async () => replies.shift(), sleep: async ms => { waits.push(ms); } });
+  assertEqual(ok, 'done');
+  assertDeepEqual(waits, [2000]);
+
+  let refused = null;
+  let tries = 0;
+  const reason = 'This account may not use the CladFlo Worker. Ask the owner to add your email.';
+  try {
+    await chatWorker({ workerUrl: WORKER, auth: { idToken: 't' }, messages: [], sleep: noSleep, fetch: async () => { tries++; return reply(403, { error: reason }); } });
+  } catch (err) { refused = err; }
+  assertEqual(refused.status, 403);
+  assertEqual(refused.message, reason);
+  assertEqual(tries, 1, 'a refusal is not retried');
+
+  let offline = '';
+  try {
+    await chatWorker({ workerUrl: WORKER, auth: { idToken: 't' }, messages: [], sleep: noSleep, retries: 1, fetch: async () => { throw new Error('offline'); } });
+  } catch (err) { offline = err.message; }
+  assertEqual(offline, 'Could not reach the CladFlo Worker. Check the Worker URL and your connection.');
+
+  let empty = '';
+  try { await chatWorker({ workerUrl: WORKER, auth: { idToken: 't' }, messages: [], fetch: async () => reply(200, {}) }); } catch (err) { empty = err.message; }
+  assertEqual(empty, 'The CladFlo Worker sent an empty reply.');
+});
+
+later('minutesChat: an own key goes straight to Groq; without one the Worker is used', async () => {
+  const urls = [];
+  const fetch = async url => { urls.push(url); return url === GROQ_URL ? answer('from groq') : workerAnswer('from worker'); };
+  const own = minutesChat({ key: KEY, workerUrl: WORKER, auth: { idToken: 't' }, fetch });
+  assertEqual(await own([{ role: 'user', content: 'x' }], { json: true }), 'from groq');
+  const viaWorker = minutesChat({ key: '', workerUrl: WORKER, auth: { idToken: 't' }, model: 'llama-3.1-8b-instant', fetch });
+  assertEqual(await viaWorker([{ role: 'user', content: 'x' }]), 'from worker');
+  assertDeepEqual(urls, [GROQ_URL, 'https://cladflo.example.workers.dev/ai/chat']);
 });
 
 export const groqTestsDone = Promise.all(pending);

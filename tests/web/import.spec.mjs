@@ -1,11 +1,13 @@
 // Excel import through the real UI. The SheetJS CDN script is served from the
 // npm copy so the spec runs offline and always against the same version.
+// Imports are raw data (Home only), so the calendar checks first put the
+// clients on it from the Client page.
 
 import { test, expect } from './fixtures.mjs';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openApp } from './helpers.mjs';
+import { openApp, waitForImport } from './helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const fixture = name => join(root, 'tests', 'fixtures', name);
@@ -20,12 +22,28 @@ test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
 
+/** Import a fixture and wait for its result; an earlier toast is closed first. */
 async function importFile(page, name) {
+  if (await page.locator('#banner').isVisible()) await page.locator('#banner-close').click();
   await page.locator('#import-file').setInputFiles(fixture(name));
-  await expect(page.locator('#banner')).toBeVisible();
+  await waitForImport(page);
 }
 
 const cell = (page, key) => page.locator(`#grid .day[data-key="${key}"]`);
+
+/** Home → each client → Add to calendar, then back to Month view (September). */
+async function showOnCalendar(page, names) {
+  for (const name of names) {
+    if (await page.locator('#banner').isVisible()) await page.locator('#banner-close').click();
+    await page.locator('#view-dashboard').click();
+    await page.locator('.client-name', { hasText: name }).click();
+    await page.locator('#page-client .calendar-add').click();
+    await expect(page.locator('#banner:not(.is-busy) #banner-title')).toHaveText(`Added 1 reminder for ${name} to the calendar`);
+  }
+  await page.locator('#banner-close').click();
+  await page.locator('#view-calendar').click();
+  await page.locator('#view-month').click();
+}
 
 test('the Import Excel button on Home opens the file picker', async ({ page }) => {
   await page.locator('#view-dashboard').click();
@@ -34,12 +52,16 @@ test('the Import Excel button on Home opens the file picker', async ({ page }) =
   expect((await chooser).isMultiple()).toBe(false);
 });
 
-test('sample.xlsx: chips land on the dates from the BD Notes', async ({ page }) => {
+test('sample.xlsx: Home only at first; on the calendar, chips land on the dates from the BD Notes', async ({ page }) => {
   await importFile(page, 'sample.xlsx');
 
   await expect(page.locator('#banner-title')).toHaveText(
-    'Imported 4 reminders: 4 new, 0 duplicates (1 without a date → Sun, 27 September 2026, 1 skipped)');
-  // Jumped to the first imported date's month.
+    'Imported 4 reminders: 4 new (1 without a date → Sun, 27 September 2026, 1 skipped)');
+  await expect(page.locator('#banner-body')).toContainText('They are on Home, not the calendar');
+  await expect(page.locator('#grid .chip')).toHaveCount(0);
+
+  await showOnCalendar(page, ['Falcon Trading', 'Palm Holdings']);
+  await page.locator('#next').click();
   await expect(page.locator('#month-label')).toHaveText('October 2026');
 
   const falcon = cell(page, '2026-10-05').locator('.chip');
@@ -54,6 +76,8 @@ test('sample.xlsx: chips land on the dates from the BD Notes', async ({ page }) 
 
 test('the panel shows the company details and the BD Notes', async ({ page }) => {
   await importFile(page, 'sample.xlsx');
+  await showOnCalendar(page, ['Falcon Trading']);
+  await page.locator('#next').click();
   await cell(page, '2026-10-05').locator('.chip-title').click();
 
   const notes = page.locator('#day-events .event-notes');
@@ -73,21 +97,27 @@ test('a row with no date lands on the selected day at the import time', async ({
   await importFile(page, 'sample.xlsx');
 
   await expect(page.locator('#banner-title')).toContainText('1 without a date → Tue, 29 September 2026');
+  await expect(cell(page, '2026-09-29').locator('.chip')).toHaveCount(0);
+  await showOnCalendar(page, ['Desert Rose LLC']);
   const rose = cell(page, '2026-09-29').locator('.chip');
   await expect(rose.locator('.chip-title')).toHaveText('Follow up: Desert Rose LLC');
   await expect(rose.locator('.chip-time')).toHaveText('10:00');
 });
 
-test('importing the same file again adds no duplicates', async ({ page }) => {
+test('importing the same file again adds every row as a duplicate, with a badge on Home', async ({ page }) => {
   await importFile(page, 'sample.xlsx');
-  const count = () => page.evaluate(() => JSON.parse(localStorage.getItem('client-calendar.events.v1')).length);
-  expect(await count()).toBe(4);
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('client-calendar.events.v1')));
+  expect((await stored()).length).toBe(4);
 
   await page.locator('#banner-close').click();
   await importFile(page, 'sample.xlsx');
-  await expect(page.locator('#banner-title')).toContainText('Imported 4 reminders: 0 new, 4 duplicates');
-  expect(await count()).toBe(4);
-  await expect(cell(page, '2026-10-05').locator('.chip')).toHaveCount(1);
+  await expect(page.locator('#banner-title')).toContainText('Imported 4 reminders: 0 new, 4 duplicates (added)');
+  const events = await stored();
+  expect(events.length).toBe(8);
+  expect(events.filter(e => e.duplicate).length).toBe(4);
+  expect(new Set(events.map(e => e.importKey)).size).toBe(8);
+  await page.locator('#view-dashboard').click();
+  await expect(page.locator('.client-row[data-client="Falcon Trading"] .dup-badge')).toHaveText('Duplicate');
 });
 
 test('the user\'s test-data-pipeline.xlsx imports without errors', async ({ page }) => {
@@ -98,7 +128,8 @@ test('the user\'s test-data-pipeline.xlsx imports without errors', async ({ page
   await importFile(page, 'test-data-pipeline.xlsx');
 
   await expect(page.locator('#banner-title')).toHaveText(
-    'Imported 1 reminder: 1 new, 0 duplicates (0 without a date → Sun, 27 September 2026, 0 skipped)');
+    'Imported 1 reminder: 1 new (0 without a date → Sun, 27 September 2026, 0 skipped)');
+  await showOnCalendar(page, ['Acme Lt.']);
   const chip = cell(page, '2026-09-26').locator('.chip');
   await expect(chip.locator('.chip-title')).toHaveText('Follow up: Acme Lt.');
   await expect(chip.locator('.chip-time')).toHaveText('10:00');

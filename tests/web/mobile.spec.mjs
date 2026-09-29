@@ -64,7 +64,8 @@ async function expectTouchFriendly(page) {
       if (!r.width || !r.height || getComputedStyle(b).visibility === 'hidden') continue; // not shown
       const name = b.id || b.getAttribute('aria-label') || b.textContent.trim();
       const content = Boolean(b.closest('.dashboard'));
-      const offSides = (r.left < -0.5 || r.right > vw + 0.5) && !(content && inScroller(b));
+      // A sideways scroller (the phone nav with 5+ pages, wide tables) may hold buttons past the edge.
+      const offSides = (r.left < -0.5 || r.right > vw + 0.5) && !inScroller(b);
       const offTopBottom = !content && (r.top < -0.5 || r.bottom > vh + 0.5);
       if (offSides || offTopBottom) {
         problems.push(`${name} is off screen (${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.right)},${Math.round(r.bottom)})`);
@@ -234,7 +235,7 @@ test('form on phones: date and time stack, Cancel/Save stay pinned at the bottom
 
   // Scroll the form to the top: the actions are still on screen at the bottom.
   await page.locator('#modal .modal-card').evaluate(n => { n.scrollTop = 0; });
-  const actions = await rectOf(page.locator('.modal-actions'));
+  const actions = await rectOf(page.locator('#event-form .modal-actions'));
   expect(actions.bottom).toBeGreaterThan(actions.vh - 2);
   expect(actions.width).toBeGreaterThan(actions.vw - 2);
 });
@@ -470,13 +471,15 @@ test('dashboard: status cards, a location row and client cards that fit the scre
   await page.screenshot({ path: shotName('dashboard-full'), fullPage: true });
 });
 
-test('dashboard: tapping a location filters, tapping a client opens the sheet', async ({ page }) => {
+test('dashboard: tapping a location filters, tapping a client opens its page, a reminder there opens the sheet', async ({ page }) => {
   await open(page, { view: 'dashboard' });
   await page.locator('.loc-city[data-city="Riyadh"]').tap();
   await expect(page.locator('.client-row:not(.client-head) .client-name')).toHaveText(['Oasis Group']);
   await expect(page.locator('.filter-tag')).toHaveText(['Saudi Arabia', 'Riyadh']);
 
   await page.locator('.client-name', { hasText: 'Oasis Group' }).tap();
+  await expect(page.locator('#page-client .profile-name')).toHaveText('Oasis Group');
+  await page.locator('#page-client [data-action="open-reminder"]').first().tap();
   await expect(page.locator('#panel')).toBeVisible();
   await expect(page.locator('#day-events .event-title')).toHaveText('Budget sign-off');
   await expect(page.locator('#day-events .event-city')).toHaveText('Riyadh');

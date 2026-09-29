@@ -1,5 +1,7 @@
 // Shared helpers for the browser specs.
 
+import { expect } from '@playwright/test';
+
 export const STORAGE_KEY = 'client-calendar.events.v1';
 
 /** Today's date as the app writes it: local YYYY-MM-DD. */
@@ -56,4 +58,13 @@ export async function goToView(page, view, action = 'click') {
     await page.locator('#view-calendar')[action]();
   }
   await button[action]();
+}
+
+/**
+ * Wait until an Excel import has finished. The toast shows "Importing…" (busy)
+ * as soon as the file is picked, so its visibility alone does not mean done:
+ * wait for the summary or the error in a toast that is no longer busy.
+ */
+export async function waitForImport(page) {
+  await expect(page.locator('#banner:not(.is-busy):visible #banner-title')).toHaveText(/^(Imported|Import failed)/);
 }

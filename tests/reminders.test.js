@@ -88,3 +88,9 @@ test('reminderMessage falls back when notes are empty', () => {
 test('popupTitle greets with the reminder title', () => {
   assertEqual(popupTitle(base), 'Hey you have a Renewal call');
 });
+
+test('a reminder cleared from the calendar never pops up', () => {
+  const now = new Date(2025, 4, 15, 9, 50);
+  assertEqual(dueReminders([{ ...base, calendarHidden: true }], now).length, 0);
+  assertEqual(dueReminders([base], now).length, 1);
+});

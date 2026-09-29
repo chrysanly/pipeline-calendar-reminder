@@ -1,5 +1,5 @@
-import { test, assertEqual, assertDeepEqual } from './runner.js';
-import { buildClients, statusCounts, locationTree, filterClients, paginate, parsePageSize, NO_CLIENT } from '../js/dashboard.js';
+import { test, assert, assertEqual, assertDeepEqual } from './runner.js';
+import { buildClients, statusCounts, locationTree, filterClients, paginate, parsePageSize, progressData, homeRows, pipelineClients, homeStatusFilter, duplicateCount, filterBoard, parseBoardFilters, hasBoardFilters, EMPTY_BOARD_FILTERS, NO_CLIENT } from '../js/dashboard.js';
 
 const NOW = new Date(2026, 8, 27, 10, 0);
 let n = 0;
@@ -121,4 +121,112 @@ test('parsePageSize accepts whole numbers 1–1000, else the fallback', () => {
   assertEqual(parsePageSize(100), 100);
   assertEqual(parsePageSize('5000'), 1000);
   for (const bad of ['', '0', '-3', '2.5', 'abc', null]) assertEqual(parsePageSize(bad, 50), 50);
+});
+
+test('buildClients counts the duplicate reminders an import added', () => {
+  const [acme, falcon] = buildClients([
+    evt('Acme', { duplicate: true }), evt('Acme'), evt('Acme', { duplicate: true }), evt('Falcon')
+  ], NOW);
+  assertDeepEqual([acme.duplicateCount, falcon.duplicateCount], [2, 0]);
+});
+
+test('progressData: Potential and Active at the end of each of the last 6 months', () => {
+  const clients = [
+    { status: 'potential', lastUpdated: new Date(2026, 5, 10).toISOString() }, // June
+    { status: 'active', lastUpdated: new Date(2026, 7, 3).toISOString() }, // August
+    { status: 'active', lastUpdated: new Date(2026, 8, 20).toISOString() }, // September
+    { status: 'potential', lastUpdated: '' }, // no timestamp: every month
+    { status: 'lead', lastUpdated: new Date(2026, 8, 1).toISOString() },
+    { status: 'inactive', lastUpdated: '' }
+  ];
+  const data = progressData(clients, NOW);
+  assertDeepEqual(data.months.map(m => m.label), ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
+  assertDeepEqual(data.months.map(m => m.key), ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']);
+  assertDeepEqual(data.months.map(m => [m.potential, m.active]), [[1, 0], [1, 0], [2, 0], [2, 0], [2, 1], [2, 2]]);
+  assertDeepEqual(data.totals, { potential: 2, active: 2 });
+  assertDeepEqual(data.share, { potential: 33, active: 33 }, '2 of 6 clients each');
+  assertEqual(data.max, 2);
+});
+
+test('progressData: no clients still gives 6 empty months; the year rolls over; max is at least 1', () => {
+  const data = progressData([], new Date(2027, 1, 15), 6);
+  assertDeepEqual(data.months.map(m => m.key), ['2026-09', '2026-10', '2026-11', '2026-12', '2027-01', '2027-02']);
+  assert(data.months.every(m => m.potential === 0 && m.active === 0));
+  assertDeepEqual([data.totals.potential, data.totals.active, data.max], [0, 0, 1]);
+  assertDeepEqual(data.share, { potential: 0, active: 0 }, 'no clients: no division by zero');
+  assertEqual(progressData([], NOW, 3).months.length, 3);
+});
+
+const BOARD = {
+  lead: [{ key: 'a', name: 'Acme', status: 'lead', city: 'Dubai', country: 'UAE', phone: '', location: '' }],
+  potential: [],
+  active: [
+    { key: 'f', name: 'Falcon', status: 'active', city: 'Riyadh', country: 'Saudi Arabia', phone: '+966 1', location: '' },
+    { key: 'p', name: 'Palm', status: 'active', city: '', country: '', phone: '', location: '' }
+  ],
+  inactive: []
+};
+
+test('filterBoard narrows every column and counts shown of total', () => {
+  const all = filterBoard(BOARD);
+  assertDeepEqual([all.shown, all.total], [3, 3]);
+  const uae = filterBoard(BOARD, { ...EMPTY_BOARD_FILTERS, country: 'UAE' });
+  assertDeepEqual(uae.columns.lead.map(c => c.name), ['Acme']);
+  assertDeepEqual(uae.columns.active, []);
+  assertDeepEqual([uae.shown, uae.total], [1, 3]);
+  assertDeepEqual(filterBoard(BOARD, { status: 'active', search: 'riy' }).columns.active.map(c => c.name), ['Falcon']);
+  assertDeepEqual(filterBoard(BOARD, { city: 'Unknown' }).columns.active.map(c => c.name), ['Palm'], 'Unknown matches a blank city');
+  assertEqual(filterBoard(BOARD, { search: 'nobody' }).shown, 0);
+  assertEqual(BOARD.active.length, 2, 'the input is untouched');
+});
+
+test('parseBoardFilters reads saved filters and drops anything odd', () => {
+  assertDeepEqual(parseBoardFilters(JSON.stringify({ search: 'acme', status: 'active', country: 'UAE', city: 'Dubai' })),
+    { search: 'acme', status: 'active', country: 'UAE', city: 'Dubai' });
+  assertDeepEqual(parseBoardFilters(JSON.stringify({ status: 'won', country: '  ', city: 7, search: 5 })),
+    { search: '', status: null, country: null, city: null });
+  for (const raw of [null, '', '{broken', '"text"', '[]']) assertDeepEqual(parseBoardFilters(raw), { ...EMPTY_BOARD_FILTERS }, String(raw));
+  assertEqual(parseBoardFilters(JSON.stringify({ search: 'x'.repeat(500) })).search.length, 200);
+});
+
+test('hasBoardFilters is true only when something filters', () => {
+  assertEqual(hasBoardFilters(EMPTY_BOARD_FILTERS), false);
+  assertEqual(hasBoardFilters({ search: '   ' }), false);
+  assertEqual(hasBoardFilters({ search: 'a' }), true);
+  assertEqual(hasBoardFilters({ city: 'Dubai' }), true);
+});
+
+test('homeRows: each client, then one line per duplicate row, so every imported row shows', () => {
+  const events = [
+    evt('Acme', { id: 'a1', importKey: 'acme|2026-09-28', date: '2026-09-28' }),
+    evt('Acme', { id: 'a2', importKey: 'acme|2026-09-28#1', duplicate: true, date: '2026-10-02', phone: '+971 4 999' }),
+    evt('Acme', { id: 'a3', importKey: 'acme|2026-09-20', duplicate: true, date: '2026-09-20' }),
+    evt('Falcon', { id: 'f1' })
+  ];
+  const rows = homeRows(buildClients(events, NOW), events, NOW);
+  assertDeepEqual(rows.map(r => [r.name, r.isDuplicate, r.rowId]), [
+    ['Acme', false, 'client:acme'], ['Acme', true, 'dup:a3'], ['Acme', true, 'dup:a2'], ['Falcon', false, 'client:falcon']
+  ]);
+  assertEqual(rows.length, events.length, 'one line per reminder here');
+  assertEqual(rows[0].reminderCount, 1, 'the client line counts its own reminders, not the duplicates');
+  assertEqual(rows[2].phone, '+971 4 999', 'a duplicate line shows its own phone');
+  assertEqual(rows[1].nextReminder, null, 'in the past: no next reminder');
+  assertEqual(rows[2].nextReminder.id, 'a2');
+  assertEqual(filterClients(rows, { search: 'falcon' }).length, 1, 'the Home filters work on the lines');
+  assertEqual(filterClients(rows, { search: 'acme' }).length, 3);
+  assertDeepEqual(homeRows([], []), []);
+});
+
+test('Home lists only potential and active clients; its status filter takes only those two', () => {
+  const clients = ['lead', 'potential', 'active', 'inactive'].map(status => ({ key: status, name: status, status }));
+  assertDeepEqual(pipelineClients(clients).map(c => c.status), ['potential', 'active']);
+  assertEqual(homeStatusFilter('potential'), 'potential');
+  assertEqual(homeStatusFilter('active'), 'active');
+  assertEqual(homeStatusFilter('lead'), null);
+  assertEqual(homeStatusFilter(null), null);
+});
+
+test('duplicateCount counts the reminders an import added again', () => {
+  assertEqual(duplicateCount([evt('Acme'), evt('Acme', { duplicate: true }), evt('Falcon', { duplicate: true }), evt('Palm', { duplicate: false })]), 2);
+  assertEqual(duplicateCount([]), 0);
 });
