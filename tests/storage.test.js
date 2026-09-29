@@ -230,3 +230,34 @@ test('countOnCalendar: the reminders still on the calendar in a period, both end
   assertEqual(countOnCalendar(list, { from: '2026-11-01', to: '2026-11-30' }), 0);
   assertEqual(countOnCalendar([], { from: '2026-10-01', to: '2026-10-31' }), 0);
 });
+
+// ---------- length on the Day/Week grid ----------
+
+import { parseEventLength, eventDuration, DEFAULT_DURATION } from '../js/storage.js';
+
+test('normalizeEvent keeps a valid durationMinutes and leaves it out when blank', () => {
+  assertEqual(normalizeEvent({ ...sample, durationMinutes: 45 }).durationMinutes, 45);
+  assertEqual(normalizeEvent({ ...sample, durationMinutes: '90' }).durationMinutes, 90);
+  assert(!('durationMinutes' in normalizeEvent(sample)), 'older reminders stay as they were');
+  assert(!('durationMinutes' in normalizeEvent({ ...sample, durationMinutes: 'abc' })));
+});
+
+test('durationMinutes is clamped to 15 minutes – 24 hours', () => {
+  assertEqual(normalizeEvent({ ...sample, durationMinutes: 5 }).durationMinutes, 15);
+  assertEqual(normalizeEvent({ ...sample, durationMinutes: 5000 }).durationMinutes, 1440);
+  assertEqual(parseEventLength(0), null);
+  assertEqual(parseEventLength(''), null);
+});
+
+test('eventDuration defaults to 30 minutes', () => {
+  assertEqual(DEFAULT_DURATION, 30);
+  assertEqual(eventDuration(normalizeEvent(sample)), 30);
+  assertEqual(eventDuration({ durationMinutes: 60 }), 60);
+  assertEqual(eventDuration(null), 30);
+});
+
+test('updateEvent keeps durationMinutes through an edit', () => {
+  const list = addEvent([], { ...sample, durationMinutes: 60 });
+  const [edited] = updateEvent(list, list[0].id, { title: 'Moved' });
+  assertEqual(edited.durationMinutes, 60);
+});

@@ -1,7 +1,8 @@
 // Top bar, right side: the account dropdown, the sign-in button and the
-// "Saving… / Saved" indicator.
+// "Saving… / Syncing… / Saved" indicator.
 
 import { $ } from './ui.js';
+import { SAVE_LABELS } from './save-status.js';
 
 /**
  * Sign-in area and the signed-out prompt.
@@ -53,24 +54,22 @@ export function bindAccountMenu() {
   });
 }
 
-let pending = 0;
 let savedTimer = null;
 
-/** Show "Saving…" until every write passed here settles, then "Saved" briefly. */
-export function trackSave(promise) {
+/**
+ * The save indicator for a summary from save-status.js: 'saving' | 'syncing'
+ * | 'saved' | 'failed'. "Saved" shows briefly; "Not saved" stays with Retry.
+ */
+export function renderSaveStatus(state) {
   const status = $('#sync-status');
-  pending++;
   clearTimeout(savedTimer);
   status.hidden = false;
-  status.className = 'sync-status is-saving';
-  status.textContent = 'Saving…';
-  const settle = ok => {
-    pending--;
-    if (pending > 0) return;
-    status.className = `sync-status ${ok ? 'is-saved' : 'is-failed'}`;
-    status.textContent = ok ? 'Saved' : 'Not saved';
-    savedTimer = setTimeout(() => { status.hidden = true; }, ok ? 1500 : 4000);
-  };
-  promise.then(() => settle(true), () => settle(false));
-  return promise;
+  status.className = `sync-status is-${state}`;
+  status.textContent = SAVE_LABELS[state];
+  $('#sync-retry').hidden = state !== 'failed';
+  if (state === 'saved') savedTimer = setTimeout(() => { status.hidden = true; }, 1500);
+}
+
+export function bindSaveRetry(retry) {
+  $('#sync-retry').addEventListener('click', retry);
 }

@@ -14,7 +14,7 @@ test('while the Firebase scripts load: a loading line, no bare calendar; then th
   await page.goto('/index.html?backend=local', { waitUntil: 'commit' });
 
   await expect(page.locator('#app-loading')).toBeVisible();
-  await expect(page.locator('#app-loading')).toHaveText('Loading your reminders…');
+  await expect(page.locator('#app-loading .splash-text')).toHaveText('Loading your reminders…');
   await expect(page.locator('.calendar')).toBeHidden();
   await expect(page.locator('#month-label')).toBeHidden();
 
@@ -29,7 +29,8 @@ test('first visit lands on Home with its empty-state message, not a blank page',
   await expect(page.locator('#dashboard')).toBeVisible();
   await expect(page.locator('#app-loading')).toHaveCount(0);
   await expect(page.locator('.calendar')).toBeHidden();
-  await expect(page.locator('#client-list')).toContainText('No clients yet');
+  await expect(page.locator('#home-board .board-card')).toHaveCount(0);
+  await expect(page.locator('#home-board .board-empty')).toHaveText(Array(4).fill('Drop a client here'));
 });
 
 // Loaded states, saved as screenshots for review: test-results/screens/*.png
@@ -50,10 +51,11 @@ for (const [name, viewport] of SCREENS) {
     await page.screenshot({ path: `test-results/screens/signed-out-${name}.png`, fullPage: true });
   });
 
-  test(`loaded, no data yet (${name}): Home says "No clients yet" and offers Import Excel`, async ({ page }) => {
+  test(`loaded, no data yet (${name}): Home shows an empty board and offers Import Excel`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto('/index.html?backend=local');
-    await expect(page.locator('#client-list')).toContainText('No clients yet: add a reminder or import Excel');
+    await expect(page.locator('#home-board .board-empty')).toHaveText(Array(4).fill('Drop a client here'));
+    await expect(page.locator('#home-board .loading-state')).toHaveCount(0);
     await expect(page.locator('#import-btn')).toBeVisible();
     await expect(page.locator('#app-loading')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);

@@ -79,19 +79,27 @@ export function collectionBackend(db, uid, name, normalize = data => data) {
       return snap.docs.map(fromDoc);
     },
 
-    /** Write only what changed between the two lists. */
+    /**
+     * Write only what changed between the two lists. Resolves as soon as
+     * Firestore has the change on this device (commit() applies it locally at
+     * once); `confirmed` settles when the server accepts or refuses it, which
+     * on a slow or offline connection can take minutes.
+     */
     async write(prev, next) {
       const { upserts, deletes } = diffEvents(prev, next);
       const ops = [
         ...upserts.map(({ id, ...data }) => batch => batch.set(docs.doc(id), data)),
         ...deletes.map(id => batch => batch.delete(docs.doc(id)))
       ];
+      const commits = [];
       for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
         const batch = db.batch();
         for (const op of ops.slice(i, i + BATCH_LIMIT)) op(batch);
-        await batch.commit();
+        commits.push(batch.commit());
       }
-      return { upserts: upserts.length, deletes: deletes.length };
+      const confirmed = Promise.all(commits).then(() => {});
+      confirmed.catch(() => {}); // reported by whoever watches `confirmed`
+      return { upserts: upserts.length, deletes: deletes.length, confirmed };
     }
   };
 }

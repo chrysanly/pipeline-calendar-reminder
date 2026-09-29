@@ -1,5 +1,5 @@
-// Client tools: the Home progress chart, duplicate imports (Home only), a
-// client on Home opens the Client tab, Follow up / Add to calendar / Add
+// Client tools: the Home progress chart, duplicate imports (the Duplicates
+// card), a client on the Client tab opens its page, Follow up / Add to calendar / Add
 // minutes, many comments, the searchable select, the date and range pickers,
 // and the busy-then-result toasts.
 
@@ -71,9 +71,17 @@ async function expectBusyThenDone(page, busy, done) {
   expect(doneAt).toBeGreaterThan(busyAt);
 }
 
+/** The Client tab's list of every client (leaving an open profile first). */
+async function openClientList(page) {
+  await page.locator('#view-client').click();
+  const back = page.locator('#page-client .page-back');
+  if (await back.isVisible()) await back.click();
+  await expect(page.locator('#clients-table .client-head')).toBeVisible();
+}
+
 async function openClient(page, name) {
-  await page.locator('#view-dashboard').click();
-  await page.locator('.client-name', { hasText: name }).click();
+  await openClientList(page);
+  await page.locator('#clients-table .client-name', { hasText: name }).click();
   await expect(page.locator('#page-client .profile-name')).toHaveText(name);
 }
 
@@ -98,24 +106,26 @@ test('Home shows the Potential and Active progress chart first', async ({ page }
   await expect(page.locator('#progress-bars')).toHaveAttribute('aria-label', /Now 1 potential \(33% of clients\) and 2 active \(67%\)/);
 });
 
-test('uploading the file again adds the rows as duplicates with a badge, on Home only', async ({ page }) => {
+test('uploading the file again adds the rows as duplicates, counted on Home', async ({ page }) => {
   await importLeads(page);
-  await expect(page.locator('#client-list .dup-badge')).toHaveCount(0);
+  const dupes = page.locator('.status-card.status-duplicate .status-count');
+  await expect(dupes).toHaveText('0');
   await importLeads(page, /^Imported 3 reminders: 0 new, 3 duplicates \(added\)/);
-  // Every row shows: 3 clients plus a line per duplicate row, each with the badge.
-  await expect(page.locator('.client-row:not(.client-head)')).toHaveCount(6);
-  await expect(page.locator('#client-count')).toHaveText('(6 · 3 duplicates)');
-  await expect(page.locator('.client-row[data-client="Acme Ltd."][data-duplicate] .dup-badge')).toHaveText('Duplicate');
-  await expect(page.locator('.client-row[data-client="Acme Ltd."]:not([data-duplicate]) .dup-badge')).toHaveCount(0);
-  await expect(page.locator('.client-row[data-client="Acme Ltd."]:not([data-duplicate]) .client-reminders')).toHaveText('1');
-  await expect(page.locator('#client-list .dup-badge')).toHaveCount(3);
+  // The Duplicates card counts every row imported again; the board keeps one card per client.
+  await expect(dupes).toHaveText('3');
+  await expect(page.locator('.status-card.status-duplicate')).toHaveAttribute('aria-label', '3 duplicates');
+  await expect(page.locator('#home-board .board-card')).toHaveCount(3);
+  // The Client tab lists every client once, with no duplicate lines.
+  await page.locator('#view-client').click();
+  await expect(page.locator('#clients-table .client-row:not(.client-head)')).toHaveCount(3);
+  await expect(page.locator('#clients-table .dup-badge')).toHaveCount(0);
   // Raw data: nothing on the calendar yet.
   await openMonth(page);
   await page.locator('#next').click();
   await expect(page.locator('#grid .chip')).toHaveCount(0);
 });
 
-test('one file with repeated rows: every row is imported and shown, repeats tagged Duplicate', async ({ page }) => {
+test('one file with repeated rows: every row is imported, repeats counted as duplicates', async ({ page }) => {
   const rows = [
     { Company: 'Acme Ltd.', Status: 'Potential', 'BD Notes': 'Call on 05/10/2026' },
     { Company: 'Acme Ltd.', Status: 'Potential', 'BD Notes': 'Call on 05/10/2026' },
@@ -128,9 +138,9 @@ test('one file with repeated rows: every row is imported and shown, repeats tagg
   await page.locator('#import-file').setInputFiles({ name: 'repeats.xlsx', mimeType: 'application/octet-stream', buffer: XLSX.write(book, { type: 'buffer', bookType: 'xlsx' }) });
   await expect(page.locator('#banner:not(.is-busy) #banner-title')).toHaveText(/^Imported 5 reminders: 2 new, 3 duplicates \(added\)/);
   await dismissToast(page);
-  await expect(page.locator('.client-row:not(.client-head)')).toHaveCount(5);
-  await expect(page.locator('#client-count')).toHaveText('(5 · 3 duplicates)');
-  await expect(page.locator('.client-row[data-duplicate] .dup-badge')).toHaveCount(3);
+  const dupes = page.locator('.status-card.status-duplicate .status-count');
+  await expect(dupes).toHaveText('3');
+  await expect(page.locator('#home-board .board-card .card-name')).toHaveText(['Acme Ltd.', 'Falcon Trading']);
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('client-calendar.events.v1')));
   expect(stored).toHaveLength(5);
 
@@ -140,11 +150,13 @@ test('one file with repeated rows: every row is imported and shown, repeats tagg
   await expect(page.locator('#banner:not(.is-busy) #banner-title')).toHaveText(/^Imported 5 reminders: 0 new, 5 updated/);
   await dismissToast(page);
   await page.locator('#view-dashboard').click();
-  await expect(page.locator('.client-row:not(.client-head)')).toHaveCount(5);
-  await expect(page.locator('#client-list .dup-badge')).toHaveCount(3);
+  await expect(dupes).toHaveText('3');
+  await expect(page.locator('#home-board .board-card')).toHaveCount(2);
+  const after = await page.evaluate(() => JSON.parse(localStorage.getItem('client-calendar.events.v1')));
+  expect(after).toHaveLength(5);
 });
 
-test('a client on Home opens the Client tab, not the side panel', async ({ page }) => {
+test('a client on the Client tab opens its page, not the side panel', async ({ page }) => {
   await importLeads(page);
   await openClient(page, 'Falcon Trading');
   await expect(page.locator('#page-client')).toBeVisible();
@@ -294,19 +306,19 @@ test('Client tab: every client in a table with search and searchable filters; Ba
   await expect(names).toHaveText(['Acme Ltd.'], { timeout: 2000 });
 });
 
-test('searchable select: the Home status filter and the Minutes client field', async ({ page }) => {
+test('searchable select: the board status filter and the Minutes client field', async ({ page }) => {
   await importLeads(page);
-  const status = page.locator('#client-status-filter-search');
+  const status = page.locator('#board-status-filter-search');
   await status.click();
   await status.fill('act');
   // Typing highlights the best match (Active before Inactive): Enter picks it.
   await page.keyboard.press('Enter');
-  await expect(page.locator('#client-status-filter')).toHaveValue('active');
+  await expect(page.locator('#board-status-filter')).toHaveValue('active');
   await expect(status).toHaveValue('Active');
-  await expect(page.locator('.client-row:not(.client-head) .client-name')).toHaveText(['Falcon Trading', 'Palm Holdings']);
+  await expect(page.locator('#home-board .board-card .card-name')).toHaveText(['Falcon Trading', 'Palm Holdings']);
   await status.click();
-  await page.locator('#dashboard .combo-option', { hasText: 'Potential and active' }).click();
-  await expect(page.locator('.client-row:not(.client-head)')).toHaveCount(3);
+  await page.locator('#dashboard .combo-option', { hasText: 'All statuses' }).click();
+  await expect(page.locator('#home-board .board-card')).toHaveCount(3);
 
   await openClient(page, 'Acme Ltd.');
   await page.locator('.minutes-add').click();
@@ -345,8 +357,8 @@ test('Board filters: search, status, country and city narrow the cards, show n o
   await expect(page.locator('#banner:not(.is-busy) #banner-title')).toHaveText(/^Imported 3 reminders/);
   await dismissToast(page);
 
-  await page.locator('#view-board').click();
-  const cards = page.locator('.board-card .card-name');
+  await page.locator('#view-dashboard').click();
+  const cards = page.locator('#home-board .board-card .card-name');
   const count = page.locator('.board-filter-count');
   await expect(cards).toHaveCount(3);
   await expect(count).toHaveText('3 clients');
@@ -370,7 +382,7 @@ test('Board filters: search, status, country and city narrow the cards, show n o
   await expect(page.locator('.board-col[data-status="potential"] .board-empty')).toHaveText('No clients match the filters');
 
   await page.reload();
-  await page.locator('#view-board').click();
+  await expect(page.locator('#dashboard')).toBeVisible();
   await expect(cards).toHaveText(['Palm Holdings']);
   await expect(page.locator('#board-country-filter-search')).toHaveValue('UAE');
   await page.locator('.board-clear').click();
@@ -379,23 +391,25 @@ test('Board filters: search, status, country and city narrow the cards, show n o
   await expect(cards).toHaveText(['Falcon Trading']);
 });
 
-test('the Client page has a Back to Home button at the top left that goes to Home', async ({ page }) => {
+test('the Client page has a Back button at the top left that returns to the list', async ({ page }) => {
   await importLeads(page);
   await openClient(page, 'Acme Ltd.');
   const back = page.locator('#page-client .page-back');
-  await expect(back).toHaveText('Back to Home');
+  await expect(back).toHaveText('Back to all clients');
   const box = await back.boundingBox();
   const title = await page.locator('#page-client .page-title').boundingBox();
   expect(box.height).toBeGreaterThanOrEqual(44);
   expect(box.y + box.height).toBeLessThanOrEqual(title.y + 1);
   expect(box.x).toBeLessThanOrEqual(title.x + 1);
   await back.click();
-  await expect(page.locator('#dashboard')).toBeVisible();
-  await expect(page.locator('#view-dashboard')).toHaveClass(/is-active/);
+  await expect(page.locator('#clients-table .client-head')).toBeVisible();
+  await expect(page.locator('#page-client .profile-name')).toBeHidden();
+  await expect(page.locator('#view-client')).toHaveAttribute('aria-current', 'page');
 });
 
 test('status selects open the app menu: 4 options, no search, picking saves the status', async ({ page }) => {
   await importLeads(page);
+  await openClientList(page);
   const select = page.locator('.client-row[data-client="Acme Ltd."]:not([data-duplicate]) .client-status');
   await select.click();
   const menu = page.locator('.menu-pop');

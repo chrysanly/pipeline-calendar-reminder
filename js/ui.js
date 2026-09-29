@@ -4,8 +4,11 @@ import {
   getMonthGrid, getWeekDays, formatRangeLabel, formatDayLabel, weekdayNames,
   toDateKey, eventsSortedByTime, CALENDAR_VIEWS
 } from './calendar.js';
-import { groupByDate, findEvent, calendarEvents, STATUSES, STATUS_LABELS } from './storage.js';
+import {
+  groupByDate, findEvent, calendarEvents, eventDuration, parseEventLength, DEFAULT_DURATION, STATUSES, STATUS_LABELS
+} from './storage.js';
 import { COUNTRY_NAMES, locationFromPhone } from './phone-location.js';
+import { renderTimeGrid } from './time-grid.js';
 
 export const $ = sel => document.querySelector(sel);
 
@@ -129,6 +132,34 @@ export function el(tag, className, text) {
   return node;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** The small turning sun (the logo's sinag), for loading states. */
+export function sunSpinner() {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', 'sun-spinner');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const rays = document.createElementNS(SVG_NS, 'path');
+  rays.setAttribute('class', 'sun-rays');
+  rays.setAttribute('d', 'M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1');
+  const core = document.createElementNS(SVG_NS, 'circle');
+  core.setAttribute('class', 'sun-core');
+  core.setAttribute('cx', '12');
+  core.setAttribute('cy', '12');
+  core.setAttribute('r', '4.5');
+  svg.append(rays, core);
+  return svg;
+}
+
+/** A loading line with the sun spinner, announced to screen readers. */
+export function loadingState(text = 'Loading…') {
+  const box = el('p', 'loading-state');
+  box.setAttribute('role', 'status');
+  box.append(sunSpinner(), el('span', '', text));
+  return box;
+}
+
 export function icon(name) {
   const i = el('i', `fa-solid ${name}`);
   i.setAttribute('aria-hidden', 'true');
@@ -141,24 +172,15 @@ export function withIcon(node, name, text) {
   return node;
 }
 
-function renderHeader(view, cells) {
+/** Month: the weekday names above the grid (Day/Week draw their own head). */
+function renderHeader(view) {
   const host = $('#weekdays');
   host.innerHTML = '';
   host.className = `weekdays view-${view}`;
-  if (view === 'month') {
-    for (const name of weekdayNames()) host.appendChild(el('div', 'weekday', name));
-    return;
-  }
-  const names = weekdayNames();
-  for (const cell of cells) {
-    const head = el('div', 'weekday');
-    if (cell.isToday) head.classList.add('is-today');
-    head.append(el('span', 'weekday-name', names[cell.date.getDay()]), el('span', 'weekday-number', String(cell.date.getDate())));
-    host.appendChild(head);
-  }
+  for (const name of weekdayNames()) host.appendChild(el('div', 'weekday', name));
 }
 
-function renderChip(evt, handlers) {
+export function renderChip(evt, handlers) {
   const chip = el('div', 'chip');
   chip.dataset.id = evt.id;
 
@@ -243,14 +265,21 @@ export function renderCalendar(state, handlers) {
   else if (view === 'week') cells = getWeekDays(cursor);
   else cells = getWeekDays(cursor).filter(c => c.key === toDateKey(cursor));
 
-  renderHeader(view, cells);
-
   const compact = isCompact();
   // Reminders cleared from the calendar stay on Home only.
   const byDate = groupByDate(calendarEvents(events));
   const grid = $('#grid');
+  if (view !== 'month') {
+    $('#weekdays').hidden = true;
+    renderTimeGrid(grid, cells, byDate, state, handlers);
+    renderAgenda(false, state, byDate, handlers);
+    return;
+  }
+  $('#weekdays').hidden = false;
+  renderHeader(view);
   grid.innerHTML = '';
   grid.className = `grid view-${view}`;
+  grid.style.removeProperty('--cols');
   for (const cell of cells) {
     const dayEvents = eventsSortedByTime(byDate.get(cell.key) || []);
     grid.appendChild(renderDayCell(cell, dayEvents, state, handlers, compact));
@@ -369,6 +398,7 @@ export function openModal(evt, dateKey) {
   form.elements.time.value = evt ? evt.time : '09:00';
   form.elements.notes.value = evt ? evt.notes : '';
   form.elements.reminderMinutesBefore.value = evt ? String(evt.reminderMinutesBefore) : '15';
+  form.elements.durationMinutes.value = String(eventDuration(evt));
   form.elements.status.value = (evt && evt.status) || 'lead';
   for (const field of ['phone', 'location', 'city', 'country']) {
     form.elements[field].value = (evt && evt[field]) || '';
@@ -442,6 +472,7 @@ export function readForm() {
     time: form.elements.time.value,
     notes: form.elements.notes.value.trim(),
     reminderMinutesBefore: Number(form.elements.reminderMinutesBefore.value) || 0,
+    durationMinutes: parseEventLength(form.elements.durationMinutes.value) || DEFAULT_DURATION,
     status: STATUSES.includes(form.elements.status.value) ? form.elements.status.value : 'lead',
     phone: form.elements.phone.value.trim(),
     location: form.elements.location.value.trim(),

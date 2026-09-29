@@ -97,7 +97,7 @@ test('the built page has the SEO, social and manifest tags', () => {
     '<meta name="robots" content="index,follow">',
     '<link rel="canonical" href="https://pipeline-9944d.web.app/">',
     '<link rel="icon" href="assets/favicon.ico?v=4" sizes="any">',
-    '<link rel="icon" href="assets/logo.svg?v=4" type="image/svg+xml">',
+    '<link rel="icon" href="assets/logo.svg?v=5" type="image/svg+xml">',
     '<link rel="icon" href="assets/favicon-32.png?v=4" type="image/png" sizes="32x32">',
     '<link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4">',
     '<link rel="manifest" href="assets/manifest.webmanifest">',
@@ -159,8 +159,12 @@ test('the brand logo is inline SVG, the same drawing as assets/logo.svg', () => 
   assert(/<svg class="brand-logo"[^>]*aria-hidden="true"/.test(brand[1]), 'brand has no inline aria-hidden <svg>');
   assert(!/<img\b/.test(brand[1]), 'brand still uses an <img>, which can fail to load');
   const logo = readFileSync(join(root, 'assets', 'logo.svg'), 'utf8');
+  // The geometry must match; colours may sit on a <g> in the file and classes
+  // (for the CSS animation) only inline.
+  const GEOMETRY = ['x', 'y', 'width', 'height', 'rx', 'd', 'cx', 'cy', 'r'];
   const shapes = svg => [...svg.matchAll(/<(rect|path|circle)\b([^>]*?)\/?>/g)]
-    .map(([, tag, attrs]) => `${tag} ${attrs.replace(/\s+/g, ' ').trim()}`);
+    .map(([, tag, attrs]) => `${tag} ${[...attrs.matchAll(/([a-z-]+)="([^"]*)"/g)]
+      .filter(([, name]) => GEOMETRY.includes(name)).map(([, name, value]) => `${name}="${value}"`).join(' ')}`);
   assert(JSON.stringify(shapes(brand[1])) === JSON.stringify(shapes(logo)),
     `inline logo differs from assets/logo.svg:\n${shapes(brand[1]).join('\n')}\nvs\n${shapes(logo).join('\n')}`);
 });

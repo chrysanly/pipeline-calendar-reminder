@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#e60039">
+  <!-- The saved theme before the first paint, so the splash is not the wrong colour (theme.js takes over). -->
+  <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (e) {}</script>
   <title>CladFlo — Client Reminders &amp; BD Calendar</title>
   <meta name="description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
   <meta name="robots" content="index,follow">
@@ -13,7 +15,7 @@
   <!-- Icons live in assets/ in the source and in dist/; favicon.ico, robots.txt
        and sitemap.xml are also copied to the root of dist/. ?v= busts old caches. -->
   <link rel="icon" href="assets/favicon.ico?v=4" sizes="any">
-  <link rel="icon" href="assets/logo.svg?v=4" type="image/svg+xml">
+  <link rel="icon" href="assets/logo.svg?v=5" type="image/svg+xml">
   <link rel="icon" href="assets/favicon-32.png?v=4" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4">
   <link rel="manifest" href="assets/manifest.webmanifest">
@@ -58,6 +60,7 @@
   <link rel="stylesheet" href="css/dashboard.css">
   <link rel="stylesheet" href="css/responsive.css">
   <link rel="stylesheet" href="css/features.css">
+  <link rel="stylesheet" href="css/kanban.css">
 </head>
 <body>
   <div id="banner" class="banner" role="status" aria-live="polite" hidden>
@@ -70,7 +73,7 @@
   </div>
 
   <header class="topbar">
-    <h1 class="brand"><svg class="brand-logo" viewBox="0 0 64 64" width="34" height="34" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/><path d="M32 23V15M21 26.9L17 20M43 26.9L47 20M13 35L6.1 31M51 35L57.9 31" fill="none" stroke="#ffd400" stroke-width="4.5" stroke-linecap="round"/><path d="M17.2 43.4A15 15 0 0 1 46.8 43.4" fill="none" stroke="#ffd400" stroke-width="6.5" stroke-linecap="round"/><path d="M23.5 42.9A9 9 0 0 1 38.9 40.2" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/><path d="M14 53H50" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/></svg>CladFlo</h1>
+    <h1 class="brand"><svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/><path class="logo-rays" d="M44 6.5V9.5M44 28.5V31.5M31.5 19H34.5M53.5 19H56.5M35.2 10.2L37.3 12.3M50.7 25.7L52.8 27.8M35.2 27.8L37.3 25.7M50.7 12.3L52.8 10.2" fill="none" stroke="#ffd400" stroke-width="3" stroke-linecap="round"/><path d="M40.5 27.5A15 15 0 1 0 40.5 48.5" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/><circle class="logo-sun" cx="44" cy="19" r="6.5" fill="#ffd400"/></svg>CladFlo</h1>
     <nav class="views" aria-label="Main">
       <button id="view-dashboard" type="button" data-view="dashboard" title="Home (H)"><i class="fa-solid fa-house" aria-hidden="true"></i> <span class="btn-label">Home</span></button>
       <button id="view-calendar" type="button" data-view="calendar" title="Calendar (C)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Calendar</span></button>
@@ -78,6 +81,7 @@
     </nav>
     <div class="topbar-actions">
       <span id="sync-status" class="sync-status" role="status" aria-live="polite" hidden></span>
+      <button id="sync-retry" type="button" class="ghost sync-retry" hidden><i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry</button>
       <button id="theme-toggle" type="button" class="icon" aria-label="Toggle theme"><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
       <button id="settings-btn" type="button" class="icon" aria-label="Settings" title="Settings"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>
       <div id="auth-area" class="auth-area" hidden>
@@ -110,11 +114,13 @@
   </section>
 
   <main class="layout">
-    <!-- Shown until the app's first render (the module waits for the Firebase
-         scripts); app.js removes it. -->
-    <p id="app-loading" class="app-loading" role="status" aria-live="polite">
-      <span class="app-loading-spinner" aria-hidden="true"></span> Loading your reminders…
-    </p>
+    <!-- Splash until the app's first render (the module waits for the Firebase
+         scripts); app.js fades it out and removes it. -->
+    <div id="app-loading" class="splash" role="status" aria-live="polite">
+      <svg class="splash-logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/><path class="logo-rays" d="M44 6.5V9.5M44 28.5V31.5M31.5 19H34.5M53.5 19H56.5M35.2 10.2L37.3 12.3M50.7 25.7L52.8 27.8M35.2 27.8L37.3 25.7M50.7 12.3L52.8 10.2" fill="none" stroke="#ffd400" stroke-width="3" stroke-linecap="round"/><path d="M40.5 27.5A15 15 0 1 0 40.5 48.5" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/><circle class="logo-sun" cx="44" cy="19" r="6.5" fill="#ffd400"/></svg>
+      <span class="splash-name" aria-hidden="true">CladFlo</span>
+      <span class="splash-text">Loading your reminders…</span>
+    </div>
 
     <!-- Home: every client, their status and where they are. Filled by ui.js. -->
     <section id="dashboard" class="dashboard" aria-label="Clients dashboard" hidden>
@@ -133,46 +139,8 @@
         <div id="progress-bars" class="progress-bars" role="img"></div>
       </section>
       <div id="status-cards" class="status-cards"></div>
-      <div class="dash-body">
-        <section class="dash-card dash-locations" aria-labelledby="locations-title">
-          <h2 id="locations-title" class="dash-title"><i class="fa-solid fa-earth-asia" aria-hidden="true"></i> Locations</h2>
-          <div id="location-list" class="location-list"></div>
-        </section>
-        <section class="dash-card dash-clients" aria-labelledby="clients-title">
-          <div class="dash-clients-head">
-            <h2 id="clients-title" class="dash-title"><i class="fa-solid fa-users" aria-hidden="true"></i> Clients <span id="client-count" class="client-count"></span></h2>
-            <div class="client-filters">
-              <input type="search" id="client-search" class="client-search" placeholder="Search name, phone, city…" aria-label="Search clients" autocomplete="off">
-              <select id="client-status-filter" class="client-status-filter" aria-label="Filter by status">
-                <option value="">Potential and active</option>
-                <option value="potential">Potential</option>
-                <option value="active">Active</option>
-              </select>
-              <select id="client-country-filter" class="client-status-filter" aria-label="Filter by country"></select>
-              <select id="client-city-filter" class="client-status-filter" aria-label="Filter by city"></select>
-            </div>
-          </div>
-          <div id="active-filters" class="active-filters"></div>
-          <div id="client-list" class="client-list"></div>
-          <nav id="client-pager" class="pager" aria-label="Client pages" hidden>
-            <p id="pager-info" class="pager-info" aria-live="polite"></p>
-            <label class="pager-size">Show
-              <select id="page-size" aria-label="Clients per page">
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-                <option value="custom">Custom…</option>
-              </select>
-              <input type="number" id="page-size-custom" class="page-size-custom" min="1" max="1000" step="1" inputmode="numeric" aria-label="Custom clients per page" hidden>
-            </label>
-            <div class="pager-nav">
-              <button id="page-prev" type="button" class="ghost" aria-label="Previous page"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> <span class="btn-label">Prev</span></button>
-              <span id="page-label" class="page-label"></span>
-              <button id="page-next" type="button" class="ghost" aria-label="Next page"><span class="btn-label">Next</span> <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
-            </div>
-          </nav>
-        </section>
-      </div>
+      <!-- The pipeline board (js/views/kanban.js): filters, exports, columns. -->
+      <section id="home-board" class="dash-card home-board" aria-labelledby="board-title"></section>
     </section>
 
     <!-- Meeting minutes from a transcript, with Groq. Filled by minutes-ui.js.
@@ -353,6 +321,9 @@
             <option value="60">1 hour before</option>
             <option value="1440">1 day before</option>
           </select>
+        </label>
+        <label>Length (minutes)
+          <input type="number" name="durationMinutes" min="15" max="1440" step="15" inputmode="numeric" placeholder="30">
         </label>
 
         <label class="span-2">Notes

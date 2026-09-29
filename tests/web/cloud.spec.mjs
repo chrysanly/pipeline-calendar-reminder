@@ -179,6 +179,57 @@ test('create, edit and delete write the right Firestore docs', async ({ page }) 
   expect(writes).toEqual([['set', docPath(id)], ['set', docPath(id)], ['delete', docPath(id)]]);
 });
 
+test('a write the server never answers shows Syncing, then clears after 10 seconds', async ({ page }) => {
+  await page.addInitScript(() => { window.__fakeHold = { serverAck: true }; });
+  await openCloud(page);
+  await signIn(page);
+  await createEvent(page, { title: 'Slow call', time: '14:30' });
+
+  const status = page.locator('#sync-status');
+  await expect(status).toHaveText('Syncing…');
+  await expect(todayCell(page).locator('.chip')).toHaveCount(1);
+  expect(Object.keys(await dump(page))).toHaveLength(1);
+
+  await page.clock.fastForward(10000);
+  await expect(status).toHaveText('Saved');
+  await page.clock.fastForward(2000);
+  await expect(status).toBeHidden();
+});
+
+test('a stuck write does not hold up the next save', async ({ page }) => {
+  await page.addInitScript(() => { window.__fakeHold = { serverAck: true }; });
+  await openCloud(page);
+  await signIn(page);
+  await createEvent(page, { title: 'Stuck call', time: '14:30' });
+  await expect(page.locator('#sync-status')).toHaveText('Syncing…');
+
+  await page.evaluate(() => { window.__fakeHold.serverAck = false; });
+  await createEvent(page, { title: 'Quick call', time: '15:00' });
+  // The first save is still pending, so the bar keeps saying Syncing, then clears on the timeout.
+  await expect(page.locator('#sync-status')).toHaveText('Syncing…');
+  await page.clock.fastForward(10000);
+  await expect(page.locator('#sync-status')).toHaveText('Saved');
+});
+
+test('a write the server refuses shows "Not saved" and Retry saves it', async ({ page }) => {
+  await page.addInitScript(() => { window.__fakeHold = { denyBatch: true }; });
+  await openCloud(page);
+  await signIn(page);
+  await createEvent(page, { title: 'Refused call', time: '14:30' });
+
+  await expect(page.locator('#sync-status')).toHaveText('Not saved');
+  await expect(page.locator('#banner-title')).toHaveText('Could not save your change');
+  const retry = page.locator('#sync-retry');
+  await expect(retry).toBeVisible();
+
+  await page.evaluate(() => { window.__fakeHold.denyBatch = false; });
+  await retry.click();
+  await expect(page.locator('#sync-status')).toHaveText('Saved');
+  await expect(retry).toBeHidden();
+  const writes = await page.evaluate(() => window.__fake.appWrites().filter(w => w.path.includes('/events/')).length);
+  expect(writes).toBe(2);
+});
+
 test('a change from another device shows up live', async ({ page }) => {
   await openCloud(page);
   await signIn(page);
@@ -194,8 +245,8 @@ test('a change from another device shows up live', async ({ page }) => {
   await expect(todayCell(page).locator('.chip')).toHaveCount(0);
   await expect(page.locator('#panel')).toBeHidden();
 
-  // Nothing was written back by the app.
-  expect(await page.evaluate(() => window.__fake.appWrites().length)).toBe(0);
+  // Nothing was written back by the app (CladFlo Talk's "online" presence aside).
+  expect(await page.evaluate(() => window.__fake.appWrites().filter(w => !w.path.startsWith('chat/')).length)).toBe(0);
 });
 
 test('a due reminder pops up and is marked notified in Firestore', async ({ page }) => {
@@ -342,8 +393,12 @@ test('History and minutes are saved in the account at users/{uid}/history and us
   expect(history[0][1]).toMatchObject({ action: 'create', kind: 'reminder', title: 'Follow-up call', client: 'Acme Ltd.' });
   expect('id' in history[0][1]).toBe(false);
 
-  // The saved meeting comes from this account's meetings collection.
-  await page.keyboard.press('n');
+  // The saved meeting comes from this account's meetings collection. Minutes
+  // has no nav button or key: it opens from the client's page (Add minutes).
+  await page.locator('#view-client').click();
+  await page.locator('#clients-table .client-name', { hasText: 'Acme Ltd.' }).click();
+  await page.locator('.minutes-add').click();
+  await expect(page.locator('#minutes')).toBeVisible();
   await expect(page.locator('.saved-title')).toHaveText(['Earlier meeting']);
   page.once('dialog', d => d.accept());
   await page.locator('.saved-delete').click();

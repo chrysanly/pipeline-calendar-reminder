@@ -1,4 +1,4 @@
-// Home dashboard: client statuses, locations and the client list.
+// Home dashboard: client statuses and the pipeline board (cards, filters).
 
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
@@ -39,13 +39,30 @@ async function openHome(page, { events = SEED, view = null } = {}) {
 }
 
 const count = (page, status) => page.locator(`.status-card[data-status="${status}"] .status-count`);
-const clientNames = page => page.locator('.client-row:not(.client-head) .client-name');
+const boardCards = page => page.locator('#home-board .board-card');
+const boardNames = page => page.locator('#home-board .board-card .card-name');
+const columnNames = (page, status) => page.locator(`#home-board .board-col[data-status="${status}"] .card-name`);
+const card = (page, name) => page.locator('#home-board .board-card', { has: page.locator('.card-name', { hasText: name }) });
 const stored = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), STORAGE_KEY);
 
 /** New reminder is on the calendar page: open Calendar, then the form. */
 async function openNewReminder(page) {
   await page.locator('#view-calendar').click();
   await page.locator('#add-event').click();
+}
+
+/** Pick an option in one of the board's searchable filters. */
+async function pick(page, id, text) {
+  await page.locator(`#${id}-search`).fill(text);
+  await page.keyboard.press('Enter');
+}
+
+/** The Client tab's list of every client (leaving an open profile first). */
+async function openClientList(page) {
+  await page.locator('#view-client').click();
+  const back = page.locator('#page-client .page-back');
+  if (await back.isVisible()) await back.click();
+  await expect(page.locator('#clients-table .client-head')).toBeVisible();
 }
 
 /** The Home status cards (going back to Home first if needed). */
@@ -65,10 +82,14 @@ test('the dashboard is the home page on a first visit', async ({ page }) => {
   await expect(page.locator('#next')).toBeHidden();
   await expect(page.locator('#today')).toBeHidden();
   await expect(page.locator('#month-label')).toBeHidden();
-  await expect(page.locator('#client-list')).toHaveText('No clients yet: add a reminder or import Excel');
+  await expect(page.locator('#board-title')).toHaveText('Pipeline board');
+  await expect(page.locator('#home-board .board-col')).toHaveCount(4);
+  await expect(page.locator('#home-board .board-empty')).toHaveText(Array(4).fill('Drop a client here'));
+  await expect(boardCards(page)).toHaveCount(0);
   await expectCounts(page, { lead: 0, potential: 0, active: 0, inactive: 0 });
-  await expect(page.locator('.status-card .status-label')).toHaveText(['Leads', 'Potential', 'Active', 'Inactive']);
-  for (const icon of ['fa-seedling', 'fa-star', 'fa-circle-check', 'fa-circle-pause']) {
+  await expect(page.locator('.status-card .status-label')).toHaveText(['Leads', 'Potential', 'Active', 'Inactive', 'Duplicates']);
+  await expect(page.locator('.status-card.status-duplicate .status-count')).toHaveText('0');
+  for (const icon of ['fa-seedling', 'fa-star', 'fa-circle-check', 'fa-circle-pause', 'fa-clone']) {
     await expect(page.locator(`.status-card .${icon}`)).toHaveCount(1);
   }
 });
@@ -86,79 +107,84 @@ test('H and the Home button switch to the dashboard, and it is remembered', asyn
   await expect(page.locator('#view-dashboard')).toHaveClass(/is-active/);
 });
 
-test('clients are grouped by name and counted by status', async ({ page }) => {
+test('clients are grouped by name, counted by status and shown on the board', async ({ page }) => {
   await openHome(page);
   await expectCounts(page, { lead: 2, potential: 1, active: 1, inactive: 1 });
-  await expect(clientNames(page)).toHaveText(['Acme Ltd.', 'Falcon Trading', 'Oasis Group', 'Palm Holdings', '(No client)']);
-  await expect(page.locator('#client-count')).toHaveText('(5)');
+  // Every named client is a card in its status column; reminders without a client are not.
+  await expect(boardNames(page)).toHaveText(['Palm Holdings', 'Falcon Trading', 'Acme Ltd.', 'Oasis Group']);
+  await expect(columnNames(page, 'lead')).toHaveText(['Palm Holdings']);
+  await expect(columnNames(page, 'active')).toHaveText(['Acme Ltd.']);
+  await expect(page.locator('#home-board')).not.toContainText('(No client)');
+  await expect(page.locator('#home-board .board-filter-count')).toHaveText('4 clients');
 
-  const acme = page.locator('.client-row[data-client="Acme Ltd."]');
+  const acmeCard = card(page, 'Acme Ltd.');
+  await expect(acmeCard.locator('.card-place')).toHaveText('Dubai, United Arab Emirates');
+  await expect(acmeCard.getByLabel('Stage for Acme Ltd.')).toHaveValue('active');
+
+  // The details (phone, reminders, next reminder) are in the Client tab's table.
+  await openClientList(page);
+  const acme = page.locator('#clients-table .client-row[data-client="Acme Ltd."]');
   await expect(acme.locator('.client-status')).toHaveValue('active');
   await expect(acme.locator('.client-place')).toHaveText('Dubai, United Arab Emirates');
   await expect(acme.locator('.client-phone')).toHaveText('+971 4 123 4567');
   await expect(acme.locator('.client-reminders')).toHaveText('2');
   await expect(acme.locator('.client-next')).toHaveText('Mon, 28 September 2026, 10:00');
-  await expect(page.locator('.client-row[data-client="Oasis Group"] .client-next')).toHaveText('No upcoming reminder');
-  await expect(page.locator('.client-row[data-client="(No client)"] .client-status')).toBeDisabled();
+  await expect(page.locator('#clients-table .client-row[data-client="Oasis Group"] .client-next')).toHaveText('No upcoming reminder');
 });
 
-test('clicking a status card filters the clients; clicking again clears it', async ({ page }) => {
+test('the board status filter narrows the cards; Clear filters shows them all', async ({ page }) => {
   await openHome(page);
-  const active = page.locator('.status-card[data-status="active"]');
-  await active.click();
-  await expect(active).toHaveAttribute('aria-pressed', 'true');
-  await expect(clientNames(page)).toHaveText(['Acme Ltd.']);
-  await expect(page.locator('.filter-tag')).toHaveText(['Status: Active']);
-  await expect(page.locator('#client-count')).toHaveText('(1 of 5)');
+  await pick(page, 'board-status-filter', 'Active');
+  await expect(boardNames(page)).toHaveText(['Acme Ltd.']);
+  await expect(page.locator('#home-board .board-filter-count')).toHaveText('1 of 4 clients');
+  await expect(page.locator('#home-board .board-col[data-status="lead"] .board-empty')).toHaveText('No clients match the filters');
 
-  await page.locator('.status-card[data-status="lead"]').click();
-  await expect(clientNames(page)).toHaveText(['Palm Holdings', '(No client)']);
+  await pick(page, 'board-status-filter', 'Lead');
+  await expect(boardNames(page)).toHaveText(['Palm Holdings']);
 
-  await page.locator('.status-card[data-status="lead"]').click();
-  await expect(clientNames(page)).toHaveCount(5);
-  await expect(page.locator('.filter-tag')).toHaveCount(0);
+  await page.locator('#home-board .board-clear').click();
+  await expect(boardCards(page)).toHaveCount(4);
+  await expect(page.locator('#board-status-filter')).toHaveValue('');
 });
 
-test('locations: countries and cities with counts; clicking filters, tags remove', async ({ page }) => {
+test('board location filters: country then city; Clear filters shows every card', async ({ page }) => {
   await openHome(page);
-  const countries = page.locator('.loc-country');
-  await expect(countries.locator('.loc-name')).toHaveText(['United Arab Emirates', 'Saudi Arabia', 'Unknown']);
-  await expect(countries.locator('.loc-count')).toHaveText(['2', '1', '2']);
-  await expect(page.locator('.loc-city[data-country="United Arab Emirates"] .loc-name')).toHaveText(['Abu Dhabi', 'Dubai']);
+  const optionTexts = id => page.locator(`#${id} option`).evaluateAll(os => os.map(o => o.textContent));
+  expect(await optionTexts('board-country-filter')).toEqual(['All countries', 'United Arab Emirates', 'Saudi Arabia', 'Unknown']);
 
-  await page.locator('.loc-country[data-country="United Arab Emirates"]').click();
-  await expect(clientNames(page)).toHaveText(['Acme Ltd.', 'Falcon Trading']);
+  await pick(page, 'board-country-filter', 'United Arab Emirates');
+  await expect(boardNames(page)).toHaveText(['Falcon Trading', 'Acme Ltd.']);
+  expect(await optionTexts('board-city-filter')).toEqual(['All cities', 'Abu Dhabi', 'Dubai']);
 
-  await page.locator('.loc-city[data-city="Dubai"]').click();
-  await expect(clientNames(page)).toHaveText(['Acme Ltd.']);
-  await expect(page.locator('.filter-tag')).toHaveText(['United Arab Emirates', 'Dubai']);
+  await pick(page, 'board-city-filter', 'Dubai');
+  await expect(boardNames(page)).toHaveText(['Acme Ltd.']);
 
-  await page.locator('.filter-tag', { hasText: 'Dubai' }).click();
-  await expect(clientNames(page)).toHaveText(['Acme Ltd.', 'Falcon Trading']);
-  await page.locator('.filter-tag', { hasText: 'United Arab Emirates' }).click();
-  await expect(clientNames(page)).toHaveCount(5);
+  await page.locator('#home-board .board-clear').click();
+  await expect(boardCards(page)).toHaveCount(4);
 
-  await page.locator('.loc-country[data-country="Unknown"]').click();
-  await expect(clientNames(page)).toHaveText(['Palm Holdings', '(No client)']);
+  await pick(page, 'board-country-filter', 'Unknown');
+  await expect(boardNames(page)).toHaveText(['Palm Holdings']);
 });
 
-test('search narrows the client list by name, phone or city', async ({ page }) => {
+test('search narrows the board by name, phone or city', async ({ page }) => {
   await openHome(page);
-  const search = page.locator('#client-search');
+  const search = page.locator('#board-search');
   await search.fill('riyadh');
-  await expect(clientNames(page)).toHaveText(['Oasis Group']);
+  await expect(boardNames(page)).toHaveText(['Oasis Group']);
   await search.fill('+971 4');
-  await expect(clientNames(page)).toHaveText(['Acme Ltd.']);
+  await expect(boardNames(page)).toHaveText(['Acme Ltd.']);
   await search.fill('nobody');
-  await expect(page.locator('#client-list')).toHaveText('No clients match these filters.');
+  await expect(boardCards(page)).toHaveCount(0);
+  await expect(page.locator('#home-board .board-empty')).toHaveText(Array(4).fill('No clients match the filters'));
   await search.fill('');
-  await expect(clientNames(page)).toHaveCount(5);
+  await expect(boardCards(page)).toHaveCount(4);
 });
 
-test('changing a status on the dashboard updates the counts and every reminder of that client', async ({ page }) => {
+test('changing a stage on the board updates the counts and every reminder of that client', async ({ page }) => {
   await openHome(page);
-  await page.locator('.client-row[data-client="Acme Ltd."] .client-status').selectOption('inactive');
+  await card(page, 'Acme Ltd.').getByLabel('Stage for Acme Ltd.').selectOption('inactive');
   await expectCounts(page, { lead: 2, potential: 1, active: 0, inactive: 2 });
+  await expect(columnNames(page, 'inactive')).toHaveText(['Acme Ltd.', 'Oasis Group']);
 
   const acme = (await stored(page)).filter(e => e.clientName.toLowerCase().includes('acme'));
   expect(acme.map(e => e.status)).toEqual(['inactive', 'inactive']);
@@ -168,9 +194,10 @@ test('changing a status on the dashboard updates the counts and every reminder o
   await expectCounts(page, { lead: 2, potential: 1, active: 0, inactive: 2 });
 });
 
-/** Home → a client's page → one of its reminders in the details panel. */
+/** Client tab → a client's page → one of its reminders in the details panel. */
 async function openClientReminder(page, name, title) {
-  await page.locator('.client-name', { hasText: name }).click();
+  await openClientList(page);
+  await page.locator('#clients-table .client-name', { hasText: name }).click();
   await expect(page.locator('#page-client .profile-name')).toHaveText(name);
   await page.locator('#page-client .timeline-item', { hasText: title }).locator('[data-action="open-reminder"]').click();
 }
@@ -192,8 +219,8 @@ test('clicking a client opens its Client page; a reminder there opens the detail
 
   // A client with no upcoming reminder opens on its page too.
   await page.locator('#panel-close').click();
-  await page.locator('#view-dashboard').click();
-  await page.locator('.client-name', { hasText: 'Oasis Group' }).click();
+  await openClientList(page);
+  await page.locator('#clients-table .client-name', { hasText: 'Oasis Group' }).click();
   await expect(page.locator('#page-client .timeline-list')).toContainText('Budget sign-off');
   await expect(panel).toBeHidden();
 });
@@ -227,7 +254,9 @@ test('a new reminder for a known client keeps its status and location', async ({
   await form.locator('button[type="submit"]').click();
 
   await expectCounts(page, { lead: 2, potential: 1, active: 1, inactive: 1 });
-  await expect(page.locator('.client-row[data-client="Acme Ltd."] .client-reminders')).toHaveText('3');
+  await expect(columnNames(page, 'active')).toHaveText(['Acme Ltd.']);
+  await openClientList(page);
+  await expect(page.locator('#clients-table .client-row[data-client="Acme Ltd."] .client-reminders')).toHaveText('3');
 });
 
 test('typing a phone number fills city and country; a hand-typed city is kept', async ({ page }) => {
@@ -258,9 +287,9 @@ test('importing sample.xlsx shows the cities detected from phone numbers', async
   await expect(page.locator('#banner-body')).toContainText('2 locations detected from phone numbers');
 
   // Falcon's +971 4 landline → Dubai; Desert Rose's 050 mobile → UAE only.
-  await expect(page.locator('.loc-city[data-city="Dubai"] .loc-count')).toHaveText('1');
-  await expect(page.locator('.client-row[data-client="Falcon Trading"] .client-place')).toHaveText('Dubai, United Arab Emirates');
-  await expect(page.locator('.client-row[data-client="Desert Rose LLC"] .client-place')).toHaveText('United Arab Emirates');
+  await expect(card(page, 'Falcon Trading').locator('.card-place')).toHaveText('Dubai, United Arab Emirates');
+  await expect(card(page, 'Desert Rose LLC').locator('.card-place')).toHaveText('United Arab Emirates');
+  expect(await page.locator('#board-city-filter option').evaluateAll(os => os.map(o => o.textContent))).toContain('Dubai');
   await expectCounts(page, { lead: 4, potential: 0, active: 0, inactive: 0 });
 });
 
@@ -280,7 +309,8 @@ test('the page renders at once with no script errors (blank-screen check)', asyn
   // loaded on demand, and the Firebase scripts are deferred.
   await page.route('https://cdn.sheetjs.com/**', () => {});
   await openHome(page);
-  await expect(page.locator('.status-card')).toHaveCount(4);
+  await expect(page.locator('.status-card')).toHaveCount(5);
+  await expect(boardCards(page)).toHaveCount(4);
   expect(await page.evaluate(() => typeof XLSX)).toBe('undefined');
   await goToView(page, 'month');
   await expect(page.locator('#month-label')).not.toHaveText('—');
@@ -298,25 +328,4 @@ test('the app is called CladFlo and the footer credits chrys with a portfolio li
   await expect(link).toHaveAttribute('href', 'https://portfolio-v2-mu-roan.vercel.app/');
   await expect(link).toHaveAttribute('target', '_blank');
   await expect(link).toHaveAttribute('rel', /noopener/);
-});
-
-test('with the details panel open on desktop, the client list turns into cards and never slides under it', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await openHome(page);
-  // Wide enough for the table while the panel is closed.
-  await expect(page.locator('.client-head')).toBeVisible();
-
-  await openClientReminder(page, 'Acme Ltd.', 'Renewal call');
-  await page.locator('#view-dashboard').click();
-  await expect(page.locator('#panel')).toBeVisible();
-  await expect(page.locator('.client-head')).toBeHidden();
-
-  const layout = await page.evaluate(() => {
-    const list = document.querySelector('.dash-clients');
-    const panel = document.querySelector('#panel').getBoundingClientRect();
-    const rows = [...document.querySelectorAll('.client-row:not(.client-head)')].map(r => r.getBoundingClientRect().right);
-    return { overflow: list.scrollWidth - list.clientWidth, rightmost: Math.max(...rows), panelLeft: panel.left };
-  });
-  expect(layout.overflow).toBeLessThanOrEqual(1);
-  expect(layout.rightmost).toBeLessThanOrEqual(layout.panelLeft);
 });

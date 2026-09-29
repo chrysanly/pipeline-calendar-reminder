@@ -35,7 +35,7 @@ button, a, .day, .chip-title { -webkit-tap-highlight-color: transparent; }
 
 :focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--radius-sm); }
 :is(.primary, .secondary, .danger-btn):focus-visible { box-shadow: var(--shadow-press), var(--ring); border-radius: var(--radius-pill); }
-:is(.ghost, .icon, .views button, .filter-tag, .loc-tag, .client-status, .client-name, .status-card):focus-visible { box-shadow: var(--ring); }
+:is(.ghost, .icon, .views button, .filter-tag, .client-status, .client-name, .status-card):focus-visible { box-shadow: var(--ring); }
 :is(.ghost, .icon, .views button, .filter-tag):focus-visible { border-radius: var(--radius-pill); }
 
 a { color: var(--accent-ink); }
@@ -123,29 +123,11 @@ body[data-auth="signed-out"] .layout { display: none; }
   transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
 }
 
-/* Week and day: each day is a fixed-height column that fits the window and
-   scrolls its own reminders, so a busy day never stretches the whole page. */
-.grid.view-week .day,
-.grid.view-day .day {
-  display: flex;
-  flex-direction: column;
-  height: clamp(360px, calc(100dvh - 240px), 960px);
-}
-.grid:is(.view-week, .view-day) .chips {
-  flex: 1 1 auto;
-  min-height: 0;
-  align-content: start;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
-}
 .grid:not(.view-month) .day-number { display: none; }
 
 .day.is-outside { background: transparent; opacity: .45; }
 .day.is-today { background: var(--surface); border-color: var(--today); }
 .day.is-today .day-number { color: var(--on-today); background: var(--today); }
-.grid:not(.view-month) .day.is-today { box-shadow: inset 0 4px 0 var(--today); }
 .day.is-selected { background: var(--accent-soft); border-color: var(--accent); }
 .day.is-today.is-selected { border-color: var(--today); }
 
@@ -217,8 +199,6 @@ body[data-auth="signed-out"] .layout { display: none; }
 }
 .chip-client .fa-solid { font-size: 10px; }
 
-.grid:not(.view-month) .chip { padding: 8px 10px; font-size: var(--fs-sm); }
-.grid:not(.view-month) .chip-title { white-space: normal; overflow-wrap: anywhere; }
 
 .more {
   padding: 0 6px;
@@ -377,26 +357,188 @@ body[data-auth="signed-out"] .layout { display: none; }
 .settings-section input[aria-invalid="true"],
 .settings-section select[aria-invalid="true"] { border-color: var(--danger); }
 
-/* ---------- first load (index.html #app-loading, removed by app.js) ---------- */
+/* ---------- splash (index.html #app-loading; app.js fades it out) ---------- */
 
-.app-loading {
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--sp-3);
+  background: var(--bg);
+  color: var(--text);
+  transition: opacity .35s var(--ease), visibility .35s;
+}
+.splash.is-done { pointer-events: none; }
+.splash.is-leaving { opacity: 0; visibility: hidden; }
+.splash-logo { width: 96px; height: 96px; filter: drop-shadow(0 6px 0 var(--border)); }
+.splash-name { font-size: var(--fs-2xl); font-weight: var(--fw-black); letter-spacing: -.02em; }
+.splash-text { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--muted); }
+
+/* The logo's sun: rays turn and the sun breathes (navbar slowly, splash faster). */
+.logo-rays { transform-origin: 44px 19px; animation: sun-turn 14s linear infinite; }
+.splash-logo .logo-rays { animation-duration: 3s; }
+.splash-logo .logo-sun { transform-origin: 44px 19px; animation: sun-breathe 1.6s ease-in-out infinite; }
+@keyframes sun-breathe { 50% { transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) {
+  .logo-rays, .splash-logo .logo-rays, .splash-logo .logo-sun { animation: none; }
+  .splash { transition: none; }
+}
+
+/* ---------- loading: the turning sun (ui.js sunSpinner / loadingState) ---------- */
+
+.loading-state {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-3);
-  min-height: 40vh;
+  gap: var(--sp-2);
   margin: 0;
+  padding: var(--sp-8) 0;
   font-weight: var(--fw-semibold);
   color: var(--muted);
 }
-.app-loading-spinner {
-  width: 22px;
-  height: 22px;
-  border: 3px solid var(--accent-soft);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: btn-spin .8s linear infinite;
-}
+.sun-spinner { width: 28px; height: 28px; flex: none; overflow: visible; }
+.sun-spinner .sun-rays { fill: none; stroke: var(--yellow, #ffd400); stroke-width: 2.4; stroke-linecap: round; transform-origin: 12px 12px; animation: sun-turn 2.4s linear infinite; }
+.sun-spinner .sun-core { fill: var(--yellow, #ffd400); stroke: var(--accent); stroke-width: 1.5; }
+@keyframes sun-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
-  .app-loading-spinner { animation-duration: 2.4s; }
+  .sun-spinner .sun-rays { animation: none; }
+}
+
+/* ---------- Day / Week hour grid (js/time-grid.js) ---------- */
+
+.grid.time-grid {
+  --hour: 48px; /* HOUR_PX in calendar.js */
+  --gutter: 52px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+.tg-head, .tg-allday, .tg-body {
+  display: grid;
+  grid-template-columns: var(--gutter) repeat(var(--cols), minmax(0, 1fr));
+}
+.tg-head { padding-bottom: 4px; border-bottom: var(--stroke) solid var(--border); }
+.tg-day-head {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: var(--tap);
+  padding: 4px 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+}
+.tg-day-head .weekday-number { min-width: 32px; height: 32px; margin: 0; font-size: var(--fs-lg); }
+.tg-day-head.is-today .weekday-number { color: var(--on-today); background: var(--today); }
+.tg-allday { border-bottom: var(--stroke) solid var(--border); }
+.tg-allday[hidden] { display: none; }
+.tg-allday-label { align-self: center; font-size: 10px; font-weight: var(--fw-bold); color: var(--muted); text-align: right; padding-right: 6px; }
+.tg-allday-cell { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 3px 2px; border-left: 1px solid var(--border); }
+
+.tg-scroll {
+  height: clamp(360px, calc(100dvh - 260px), 960px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.tg-body { position: relative; height: calc(24 * var(--hour)); }
+.tg-hours { position: relative; }
+.tg-hour {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Each day column: hour lines drawn by a gradient, no element per hour. */
+.grid.time-grid .day.tg-col {
+  display: block;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  cursor: default;
+  background:
+    repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px var(--hour)),
+    var(--surface);
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+}
+.grid.time-grid .day.tg-col.is-today { background-color: color-mix(in srgb, var(--today) 6%, var(--surface)); }
+.grid.time-grid .day.tg-col.is-selected { background-color: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.grid.time-grid .day.tg-col.is-drop-target { background-color: var(--accent-soft); }
+
+.tg-now { position: absolute; left: 0; right: 0; z-index: 3; height: 2px; background: var(--danger); pointer-events: none; }
+.tg-now::before { content: ''; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); }
+
+.chip.tg-event {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  padding: 3px 6px 6px;
+  font-size: var(--fs-xs);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-left: 3px solid var(--accent);
+  box-shadow: none;
+  cursor: grab;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.chip.tg-event .chip-title { white-space: normal; overflow-wrap: anywhere; line-height: 1.2; }
+.chip.tg-event.is-short { flex-direction: row; align-items: baseline; gap: 4px; padding-block: 1px; }
+.chip.tg-event.is-short .chip-client { display: none; }
+.chip.tg-event.is-short .chip-title { white-space: nowrap; }
+.tg-resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.tg-resize::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 16px;
+  height: 3px;
+  margin-left: -8px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  opacity: 0;
+}
+.chip.tg-event.is-dragging {
+  z-index: 10;
+  cursor: grabbing;
+  box-shadow: 0 10px 24px rgb(0 0 0 / .22);
+  will-change: transform, height;
+}
+.chip.tg-event.is-dragging .tg-resize::after { opacity: 1; }
+@media (hover: hover) {
+  .chip.tg-event:hover .tg-resize::after { opacity: 1; }
+  .tg-day-head:hover { color: var(--accent-ink); }
+}
+/* Touch: a taller grip to catch with a finger. */
+@media (pointer: coarse) {
+  .tg-resize { height: 14px; }
+  .tg-resize::after { opacity: 1; }
 }

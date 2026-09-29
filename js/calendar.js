@@ -152,3 +152,80 @@ export function calendarPeriod(view, date) {
   const shown = CALENDAR_VIEWS.includes(view) ? view : 'month';
   return { view: shown, from: toDateKey(from), to: toDateKey(to), label: formatRangeLabel(shown, date) };
 }
+
+// ---------- Day / Week time grid ----------
+
+/** Height of one hour on the Day and Week grids, in px (css/styles.css --hour). */
+export const HOUR_PX = 48;
+export const DAY_MINUTES = 24 * 60;
+/** Moves and resizes snap to this many minutes. */
+export const SNAP_MINUTES = 15;
+
+/** 'HH:MM' → minutes after midnight; null when blank or not a time. */
+export function timeToMinutes(time) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time || '');
+  if (!match) return null;
+  const [h, m] = [Number(match[1]), Number(match[2])];
+  return h < 24 && m < 60 ? h * 60 + m : null;
+}
+
+/** Minutes after midnight → 'HH:MM', kept inside the day. */
+export function minutesToTime(minutes) {
+  const m = Math.min(DAY_MINUTES - 1, Math.max(0, Math.round(minutes)));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+export const minutesToPx = (minutes, hourPx = HOUR_PX) => (minutes / 60) * hourPx;
+
+/** A pixel offset on the grid → minutes, snapped (15 by default). */
+export function pxToMinutes(px, hourPx = HOUR_PX, step = SNAP_MINUTES) {
+  return Math.round(((px / hourPx) * 60) / step) * step;
+}
+
+/**
+ * Where a reminder lands after a drag: `minuteDelta` later (snapped) and
+ * `dayDelta` days on, its start kept inside the day it lands on.
+ * @returns {{date: string, time: string}}
+ */
+export function moveEventTime({ date, time }, { dayDelta = 0, minuteDelta = 0 }, step = SNAP_MINUTES) {
+  const start = timeToMinutes(time) ?? 0;
+  const snapped = Math.round((start + minuteDelta) / step) * step;
+  const minutes = Math.min(DAY_MINUTES - step, Math.max(0, snapped));
+  return { date: toDateKey(addDays(fromDateKey(date), dayDelta)), time: minutesToTime(minutes) };
+}
+
+/** A new length after dragging the bottom edge, snapped, at least one step, not past midnight. */
+export function resizeDuration(startMinutes, duration, minuteDelta, step = SNAP_MINUTES) {
+  const next = Math.round((duration + minuteDelta) / step) * step;
+  return Math.max(step, Math.min(DAY_MINUTES - startMinutes, next));
+}
+
+/**
+ * Side-by-side lanes for one day's timed reminders, like Google Calendar:
+ * reminders that overlap share the width; the rest use all of it.
+ * items: [{id, start, end}] in minutes.
+ * @returns {Map<string, {lane: number, lanes: number}>}
+ */
+export function layoutOverlaps(items) {
+  const sorted = items.slice().sort((a, b) => a.start - b.start || b.end - a.end);
+  const result = new Map();
+  let cluster = [];
+  let laneEnds = [];
+  let clusterEnd = -1;
+  const close = () => {
+    for (const id of cluster) result.get(id).lanes = laneEnds.length;
+    cluster = [];
+    laneEnds = [];
+  };
+  for (const item of sorted) {
+    if (item.start >= clusterEnd) close();
+    let lane = laneEnds.findIndex(end => end <= item.start);
+    if (lane < 0) lane = laneEnds.push(0) - 1;
+    laneEnds[lane] = item.end;
+    clusterEnd = Math.max(clusterEnd, item.end);
+    cluster.push(item.id);
+    result.set(item.id, { lane, lanes: 1 });
+  }
+  close();
+  return result;
+}

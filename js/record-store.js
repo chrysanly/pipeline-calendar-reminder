@@ -13,9 +13,9 @@ const SORTERS = { meetings: newestMeetingFirst, history: sortHistory };
 
 /**
  * onChange(name, list) after every change; onError(title, message) when a
- * load or save fails.
+ * load or save fails. track(run) runs each save (the top bar's indicator).
  */
-export function createRecordStore({ onChange, onError }) {
+export function createRecordStore({ onChange, onError, track = run => run() }) {
   const lists = Object.fromEntries(RECORD_KINDS.map(name => [name, []]));
   let backends = {};
   let unsubscribes = [];
@@ -57,7 +57,13 @@ export function createRecordStore({ onChange, onError }) {
       set(name, next.map(NORMALIZERS[name]));
       const backend = backends[name];
       if (!backend) return Promise.resolve();
-      return backend.write(prev, lists[name]).catch(err => onError('Could not save your change', message(err)));
+      const saved = lists[name];
+      let tries = 0;
+      // A retry (from `track`) writes the list as it is by then.
+      const run = () => (backends[name] === backend ? backend.write(prev, tries++ ? lists[name] : saved) : null);
+      return Promise.resolve()
+        .then(() => track(run))
+        .catch(err => onError('Could not save your change', message(err)));
     },
 
     /** Add one History entry: {action, kind, title, client, detail}. */

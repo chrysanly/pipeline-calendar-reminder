@@ -1,11 +1,12 @@
-// Board page (js/views/kanban.js): columns by status, drag and drop, the
-// Stage menu, deal values, stage totals on Home, and CSV / Excel export that
-// imports back. Local mode.
+// The pipeline board on Home (js/views/kanban.js): columns by status, drag
+// and drop (mouse and touch), the Stage menu, deal values, and CSV / Excel
+// export that imports back. Local mode.
 
 import { test, expect } from './fixtures.mjs';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mouseDrag, touchDrag } from './helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const EVENTS_KEY = 'client-calendar.events.v1';
@@ -23,7 +24,7 @@ const EVENTS = [
   evt('e5', '', 'lead', '2026-10-02', { title: 'Personal' })
 ];
 
-async function openBoard(page, { events = EVENTS, deals = [], view = 'board' } = {}) {
+async function openBoard(page, { events = EVENTS, deals = [], view = 'dashboard' } = {}) {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -48,16 +49,28 @@ async function openBoard(page, { events = EVENTS, deals = [], view = 'board' } =
 
 const column = (page, status) => page.locator(`.board-col[data-status="${status}"]`);
 const card = (page, name) => page.locator('.board-card', { has: page.locator('.card-name', { hasText: name }) });
+// Grab a card by its name, away from its buttons and Stage menu.
+const namePoint = async cardLocator => {
+  const box = await cardLocator.locator('.card-name').boundingBox();
+  return { x: box.x + Math.min(20, box.width / 2), y: box.y + box.height / 2 };
+};
 const stored = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null'), key);
 
-test('Board is in the nav (B), with a column per status and a card per client', async ({ page }) => {
-  const errors = await openBoard(page, { view: 'dashboard' });
-  const nav = page.locator('#view-board');
-  await expect(nav).toHaveText('Board');
+test('the board is on Home, under the chart and cards, with no table, Locations or Board page', async ({ page }) => {
+  const errors = await openBoard(page, { view: 'month' });
+  await expect(page.locator('#view-board')).toHaveCount(0);
+  await expect(page.locator('#page-board')).toHaveCount(0);
   await page.keyboard.press('b');
-  await expect(page.locator('#page-board')).toBeVisible();
-  await expect(nav).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('#dashboard')).toBeHidden();
+  await expect(page.locator('#dashboard')).toBeVisible();
+  await expect(page.locator('#view-dashboard')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#dashboard #home-board .board')).toBeVisible();
+  await expect(page.locator('#progress-chart')).toBeVisible();
+  await expect(page.locator('#status-cards .status-card')).toHaveCount(5);
+  for (const gone of ['#client-list', '#location-list', '#client-pager', '#client-search', '.dash-body']) {
+    await expect(page.locator(`#dashboard ${gone}`)).toHaveCount(0);
+  }
+  await expect(page.locator('#board-search')).toBeVisible();
+  await expect(page.locator('#export-csv')).toBeVisible();
   await expect(page.locator('.board-col-title')).toHaveText(['Lead1', 'Potential1', 'Active1', 'Inactive0']);
   await expect(column(page, 'lead').locator('.card-name')).toHaveText(['Acme Ltd.']);
   await expect(card(page, 'Acme Ltd.').locator('.card-place')).toHaveText('Dubai, United Arab Emirates');
@@ -66,7 +79,12 @@ test('Board is in the nav (B), with a column per status and a card per client', 
   expect(errors).toEqual([]);
 });
 
-test('a deal value is checked, saved per client, and totals the column, forecast and Home', async ({ page }) => {
+test('an old saved Board page opens Home', async ({ page }) => {
+  await openBoard(page, { view: 'board' });
+  await expect(page.locator('#dashboard .board')).toBeVisible();
+});
+
+test('a deal value is checked, saved per client, and totals the column and forecast', async ({ page }) => {
   await openBoard(page);
   const acme = card(page, 'Acme Ltd.');
   await acme.getByRole('button', { name: 'Set value for Acme Ltd.' }).click();
@@ -88,6 +106,7 @@ test('a deal value is checked, saved per client, and totals the column, forecast
 
   // Editing keeps one record per client.
   const falcon = card(page, 'Falcon Trading');
+  await falcon.scrollIntoViewIfNeeded();
   await falcon.getByRole('button', { name: 'Set value for Falcon Trading' }).click();
   await falcon.getByLabel('Deal value for Falcon Trading').fill('800.50');
   await falcon.getByLabel('Currency for Falcon Trading').selectOption('USD');
@@ -98,10 +117,6 @@ test('a deal value is checked, saved per client, and totals the column, forecast
   await expect(acme.locator('.card-value')).toHaveText('AED 20,000');
   expect((await stored(page, CLIENTS_KEY)).length).toBe(2);
   await expect(page.locator('.board-forecast')).toHaveText('Forecast: AED 2,000 · USD 400.25');
-
-  await page.locator('#view-dashboard').click();
-  await expect(page.locator('#stage-totals .stage-total-label')).toHaveText(['Lead', 'Potential', 'Active', 'Inactive', 'Forecast']);
-  await expect(page.locator('#stage-totals .stage-total-value')).toHaveText(['AED 20,000', 'USD 800.50', '—', '—', 'AED 2,000 · USD 400.25']);
 });
 
 test('Cancel and Escape close the value form without saving', async ({ page }) => {
@@ -128,13 +143,53 @@ test('the Stage menu moves a client: every reminder, History and the columns', a
   expect(history[0]).toMatchObject({ action: 'status', title: 'Acme Ltd.', detail: 'Lead → Active' });
 });
 
-test('dragging a card to another column moves the client', async ({ page }) => {
+test('dragging a card with the mouse to another column moves the client', async ({ page }) => {
   await openBoard(page);
-  await card(page, 'Falcon Trading').dragTo(column(page, 'inactive'));
+  const falcon = card(page, 'Falcon Trading');
+  await falcon.scrollIntoViewIfNeeded();
+  await mouseDrag(page, falcon, column(page, 'inactive').locator('.board-cards'), { fromPoint: await namePoint(falcon) });
   await expect(column(page, 'inactive').locator('.card-name')).toHaveText(['Falcon Trading']);
   await expect(page.locator('.board-col-title')).toHaveText(['Lead1', 'Potential0', 'Active1', 'Inactive1']);
   const events = await stored(page, EVENTS_KEY);
   expect(events.find(e => e.id === 'e3').status).toBe('inactive');
+  const history = await stored(page, 'client-calendar.history.v1');
+  expect(history[0]).toMatchObject({ action: 'status', detail: 'Potential → Inactive' });
+});
+
+test('touch: a long-press picks a card up and dropping it moves the client', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await openBoard(page);
+  const acme = card(page, 'Acme Ltd.');
+  await acme.scrollIntoViewIfNeeded();
+  await touchDrag(page, acme, column(page, 'active').locator('.board-cards'), { fromPoint: await namePoint(acme) });
+  await expect(column(page, 'active').locator('.card-name')).toHaveText(['Acme Ltd.', 'Palm Holdings']);
+  const events = await stored(page, EVENTS_KEY);
+  expect(events.filter(e => e.clientName === 'Acme Ltd.').map(e => e.status)).toEqual(['active', 'active']);
+});
+
+test('touch: a quick swipe over a card is a scroll, it does not move the client', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await openBoard(page);
+  const acme = card(page, 'Acme Ltd.');
+  await acme.scrollIntoViewIfNeeded();
+  await touchDrag(page, acme, column(page, 'active').locator('.board-cards'), { fromPoint: await namePoint(acme), hold: 0 });
+  await expect(column(page, 'lead').locator('.card-name')).toHaveText(['Acme Ltd.']);
+});
+
+test('Escape during a drag puts the card back', async ({ page }) => {
+  await openBoard(page);
+  const falcon = card(page, 'Falcon Trading');
+  await falcon.scrollIntoViewIfNeeded();
+  const start = await namePoint(falcon);
+  const target = await column(page, 'inactive').boundingBox();
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + 80, { steps: 8 });
+  await expect(column(page, 'inactive')).toHaveClass(/is-over/);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect(column(page, 'potential').locator('.card-name')).toHaveText(['Falcon Trading']);
+  await expect(column(page, 'inactive')).not.toHaveClass(/is-over/);
 });
 
 async function exportAndReimport(page, buttonId, extension) {
@@ -191,7 +246,14 @@ test('phone: the columns swipe sideways and the card controls are at least 44px'
     const box = await control.boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);
   }
-  await page.locator('#view-dashboard').click();
-  const totals = await page.locator('#stage-totals').boundingBox();
-  expect(totals.width).toBeLessThanOrEqual(390);
+});
+
+test('a card name opens the client page, and Back returns to Home', async ({ page }) => {
+  await openBoard(page);
+  await card(page, 'Falcon Trading').getByRole('button', { name: 'Falcon Trading', exact: true }).click();
+  await expect(page.locator('#dashboard')).toBeHidden();
+  const back = page.locator('.page-back');
+  await expect(back).toHaveText('Back to Home');
+  await back.click();
+  await expect(page.locator('#dashboard .board')).toBeVisible();
 });

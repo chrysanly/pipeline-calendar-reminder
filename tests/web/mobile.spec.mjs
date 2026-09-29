@@ -45,7 +45,7 @@ async function open(page, { view = 'month', theme = 'light', events = SEED } = {
  * No sideways page scroll, and every visible control is ≥44×44.
  * Fixed chrome (top bar, + button) must be fully on screen. Page content (the
  * dashboard) may sit below the fold, and may only go past the sides inside
- * its own horizontally scrolling row (the locations).
+ * its own horizontally scrolling row (the board's columns).
  */
 async function expectTouchFriendly(page) {
   const report = await page.evaluate(() => {
@@ -58,7 +58,7 @@ async function expectTouchFriendly(page) {
       }
       return false;
     };
-    const buttons = [...document.querySelectorAll('.topbar button, #add-event, #prompt-sign-in, .dashboard button, .dashboard select, #client-search')];
+    const buttons = [...document.querySelectorAll('.topbar button, #add-event, #prompt-sign-in, .dashboard button, .dashboard select')];
     for (const b of buttons) {
       const r = b.getBoundingClientRect();
       if (!r.width || !r.height || getComputedStyle(b).visibility === 'hidden') continue; // not shown
@@ -212,7 +212,7 @@ test('New reminder: the button opens a form that fits, and Save works', async ({
   // 16px or more, so iOS does not zoom in on focus.
   const sizes = await page.locator('#event-form input:not([type="hidden"]), #event-form select, #event-form textarea')
     .evaluateAll(nodes => nodes.map(n => parseFloat(getComputedStyle(n).fontSize)));
-  expect(sizes.length).toBe(11); // title, client, status, phone, location, city, country, date, time, remind, notes
+  expect(sizes.length).toBe(12); // title, client, status, phone, location, city, country, date, time, remind, length, notes
   for (const size of sizes) expect(size).toBeGreaterThanOrEqual(16);
 
   await page.screenshot({ path: shotName('form') });
@@ -308,18 +308,15 @@ test('week view: every day shows its reminders with title and client', async ({ 
     'Renewal call', 'Site visit', 'Quarterly review with a very long title that must be cut off'
   ]);
   await expect(sunday.locator('.chip-client')).toHaveText(['Acme Ltd.', 'Falcon Trading', 'Palm Holdings']);
-  if (isPhone()) {
-    // A vertical list: each day under the previous one, labelled with its name.
-    const first = await rectOf(sunday);
-    const second = await rectOf(page.locator('#grid .day[data-key="2026-09-28"]'));
-    expect(second.top).toBeGreaterThan(first.bottom - 1);
-    await expect(sunday.locator('.day-name')).toHaveText('Sun');
-    await expect(sunday.locator('.day-name')).toBeVisible();
-    // The date sits right under the day name, not in the middle of a tall day.
-    const name = await rectOf(sunday.locator('.day-name'));
-    const number = await rectOf(sunday.locator('.day-number'));
-    expect(number.top - name.bottom).toBeLessThan(12);
-  }
+  // The hour grid, like Google Calendar on a phone: 7 narrow columns side by
+  // side under a head row with each day's name, and no sideways scrolling.
+  const first = await rectOf(sunday);
+  const second = await rectOf(page.locator('#grid .day[data-key="2026-09-28"]'));
+  expect(Math.abs(second.top - first.top)).toBeLessThan(1);
+  expect(second.left).toBeGreaterThan(first.left);
+  await expect(page.locator('#grid .tg-day-head[data-key="2026-09-27"] .weekday-name')).toHaveText('Sun');
+  await expect(page.locator('#grid .tg-day-head[data-key="2026-09-27"]')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(page.viewportSize().width);
 });
 
 // ---------- details panel ----------
@@ -436,48 +433,58 @@ test('the banner fits the screen and its close button is 44px', async ({ page })
 
 // ---------- Home dashboard ----------
 
-test('dashboard: status cards, a location row and client cards that fit the screen', async ({ page }) => {
+test('dashboard: status cards and a pipeline board that fit the screen', async ({ page }) => {
   await open(page, { view: 'dashboard' });
   await expect(page.locator('#dashboard')).toBeVisible();
   await expect(page.locator('.nav')).toBeHidden();
 
   const cards = page.locator('.status-card');
-  await expect(cards).toHaveCount(4);
-  await expect(cards.locator('.status-count')).toHaveText(['1', '1', '1', '1']);
+  await expect(cards).toHaveCount(5);
+  await expect(cards.locator('.status-count')).toHaveText(['1', '1', '1', '1', '0']);
   const rects = await cards.evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().toJSON()));
   if (isPhone()) {
-    // 2×2: two cards per row.
+    // Two cards per row; the Duplicates card takes a row of its own.
     expect(Math.round(rects[0].top)).toBe(Math.round(rects[1].top));
     expect(rects[2].top).toBeGreaterThan(rects[0].bottom - 1);
-    // Locations scroll sideways inside their own row; the page does not.
-    const row = await page.locator('#location-list').evaluate(n => ({
-      overflowX: getComputedStyle(n).overflowX, wraps: getComputedStyle(n).flexWrap
-    }));
-    expect(row).toEqual({ overflowX: 'auto', wraps: 'nowrap' });
+    expect(rects[4].width).toBeGreaterThan(rects[0].width * 1.5);
   } else {
-    expect(Math.round(rects[0].top)).toBe(Math.round(rects[3].top));
+    // Three, then two.
+    expect(Math.round(rects[0].top)).toBe(Math.round(rects[2].top));
+    expect(rects[3].top).toBeGreaterThan(rects[0].bottom - 1);
   }
 
-  // Clients are stacked cards (no table header on phones/tablets).
-  await expect(page.locator('.client-head')).toBeHidden();
-  const rows = page.locator('.client-row:not(.client-head)');
-  await expect(rows).toHaveCount(4);
-  const first = await rectOf(rows.nth(0));
-  const second = await rectOf(rows.nth(1));
-  expect(second.top).toBeGreaterThan(first.bottom - 1);
+  // The board: every client as a card in its column.
+  const board = page.locator('#home-board .board');
+  await expect(page.locator('#home-board .board-col')).toHaveCount(4);
+  await expect(page.locator('#home-board .board-card')).toHaveCount(4);
+  const columns = await page.locator('#home-board .board-col').evaluateAll(nodes => nodes.map(n => n.getBoundingClientRect().toJSON()));
+  if (isPhone()) {
+    // Columns scroll sideways inside the board; the page does not.
+    expect(await board.evaluate(n => getComputedStyle(n).overflowX)).toBe('auto');
+    expect(Math.round(columns[0].top)).toBe(Math.round(columns[1].top));
+    expect(columns[0].right).toBeLessThanOrEqual(await page.evaluate(() => innerWidth));
+  } else {
+    // Two columns a row.
+    expect(Math.round(columns[0].top)).toBe(Math.round(columns[1].top));
+    expect(columns[2].top).toBeGreaterThan(columns[0].bottom - 1);
+  }
+  const first = await rectOf(page.locator('#home-board .board-card').first());
+  expect(first.left).toBeGreaterThanOrEqual(0);
   expect(first.right).toBeLessThanOrEqual(first.vw);
 
   await expectTouchFriendly(page);
   await page.screenshot({ path: shotName('dashboard-full'), fullPage: true });
 });
 
-test('dashboard: tapping a location filters, tapping a client opens its page, a reminder there opens the sheet', async ({ page }) => {
+test('dashboard: a board city filter narrows the cards; a client on the Client tab opens its page, a reminder there opens the sheet', async ({ page }) => {
   await open(page, { view: 'dashboard' });
-  await page.locator('.loc-city[data-city="Riyadh"]').tap();
-  await expect(page.locator('.client-row:not(.client-head) .client-name')).toHaveText(['Oasis Group']);
-  await expect(page.locator('.filter-tag')).toHaveText(['Saudi Arabia', 'Riyadh']);
+  await page.locator('#board-city-filter-search').tap();
+  await page.locator('#home-board .combo-option', { hasText: 'Riyadh' }).tap();
+  await expect(page.locator('#home-board .board-card .card-name')).toHaveText(['Oasis Group']);
+  await expect(page.locator('#home-board .board-filter-count')).toHaveText('1 of 4 clients');
 
-  await page.locator('.client-name', { hasText: 'Oasis Group' }).tap();
+  await page.locator('#view-client').tap();
+  await page.locator('#clients-table .client-name', { hasText: 'Oasis Group' }).tap();
   await expect(page.locator('#page-client .profile-name')).toHaveText('Oasis Group');
   await page.locator('#page-client [data-action="open-reminder"]').first().tap();
   await expect(page.locator('#panel')).toBeVisible();

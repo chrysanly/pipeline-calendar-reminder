@@ -71,6 +71,16 @@
   border-right-color: transparent;
   animation: btn-spin .7s linear infinite;
 }
+.sync-status.is-syncing::before {
+  border: 2px solid var(--accent);
+  animation: sync-pulse 1.2s ease-in-out infinite;
+}
+@keyframes sync-pulse { 50% { opacity: .35; } }
+.sync-retry { min-height: 44px; margin-right: var(--sp-2); color: var(--danger); }
+.sync-retry[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .sync-status.is-saving::before, .sync-status.is-syncing::before { animation: none; }
+}
 .sync-status.is-saved::before { background: var(--st-active); box-shadow: 0 0 0 3px color-mix(in srgb, var(--st-active) 22%, transparent); }
 .sync-status.is-failed { color: var(--danger); }
 .sync-status.is-failed::before { background: var(--danger); }

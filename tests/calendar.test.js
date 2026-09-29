@@ -157,3 +157,72 @@ test('calendarPeriod: the day, the Sunday-to-Saturday week or the month on scree
   assertDeepEqual(calendarPeriod('month', new Date(2028, 1, 10)).to, '2028-02-29', 'leap year');
   assertEqual(calendarPeriod('dashboard', sat).view, 'month', 'not a calendar view: the month');
 });
+
+// ---------- Day / Week time grid ----------
+
+import {
+  timeToMinutes, minutesToTime, minutesToPx, pxToMinutes, moveEventTime, resizeDuration, layoutOverlaps, HOUR_PX
+} from '../js/calendar.js';
+
+test('timeToMinutes reads HH:MM and rejects blanks and nonsense', () => {
+  assertEqual(timeToMinutes('09:30'), 570);
+  assertEqual(timeToMinutes('0:05'), 5);
+  assertEqual(timeToMinutes(''), null);
+  assertEqual(timeToMinutes('25:00'), null);
+  assertEqual(timeToMinutes(undefined), null);
+});
+
+test('minutesToTime pads and stays inside the day', () => {
+  assertEqual(minutesToTime(570), '09:30');
+  assertEqual(minutesToTime(-20), '00:00');
+  assertEqual(minutesToTime(2000), '23:59');
+});
+
+test('pixels and minutes convert at 48px an hour, snapping to 15 minutes', () => {
+  assertEqual(HOUR_PX, 48);
+  assertEqual(minutesToPx(90), 72);
+  assertEqual(pxToMinutes(72), 90);
+  assertEqual(pxToMinutes(13), 15); // 16.25 min → 15
+  assertEqual(pxToMinutes(-5), 0);
+  assertEqual(pxToMinutes(-7), -15);
+});
+
+test('moveEventTime moves by snapped minutes and whole days', () => {
+  assertDeepEqual(moveEventTime({ date: '2026-09-29', time: '09:00' }, { minuteDelta: 50 }), { date: '2026-09-29', time: '09:45' });
+  assertDeepEqual(moveEventTime({ date: '2026-09-30', time: '09:00' }, { dayDelta: 2, minuteDelta: -60 }), { date: '2026-10-02', time: '08:00' });
+});
+
+test('moveEventTime keeps the start inside the day it lands on', () => {
+  assertDeepEqual(moveEventTime({ date: '2026-09-29', time: '01:00' }, { minuteDelta: -300 }), { date: '2026-09-29', time: '00:00' });
+  assertDeepEqual(moveEventTime({ date: '2026-09-29', time: '23:00' }, { minuteDelta: 300 }), { date: '2026-09-29', time: '23:45' });
+});
+
+test('resizeDuration snaps, keeps at least 15 minutes and ends by midnight', () => {
+  assertEqual(resizeDuration(540, 30, 40), 75);
+  assertEqual(resizeDuration(540, 30, -100), 15);
+  assertEqual(resizeDuration(1380, 30, 300), 60);
+});
+
+test('layoutOverlaps: separate reminders use the full width', () => {
+  const lanes = layoutOverlaps([{ id: 'a', start: 540, end: 570 }, { id: 'b', start: 600, end: 630 }]);
+  assertDeepEqual(lanes.get('a'), { lane: 0, lanes: 1 });
+  assertDeepEqual(lanes.get('b'), { lane: 0, lanes: 1 });
+});
+
+test('layoutOverlaps: overlapping reminders sit side by side, a free lane is reused', () => {
+  const lanes = layoutOverlaps([
+    { id: 'a', start: 540, end: 600 },
+    { id: 'b', start: 555, end: 585 },
+    { id: 'c', start: 590, end: 620 },
+    { id: 'd', start: 700, end: 730 }
+  ]);
+  assertDeepEqual(lanes.get('a'), { lane: 0, lanes: 2 });
+  assertDeepEqual(lanes.get('b'), { lane: 1, lanes: 2 });
+  assertDeepEqual(lanes.get('c'), { lane: 1, lanes: 2 });
+  assertDeepEqual(lanes.get('d'), { lane: 0, lanes: 1 });
+});
+
+test('layoutOverlaps: a reminder that ends as another starts does not overlap it', () => {
+  const lanes = layoutOverlaps([{ id: 'a', start: 540, end: 570 }, { id: 'b', start: 570, end: 600 }]);
+  assertEqual(lanes.get('b').lanes, 1);
+});

@@ -1,5 +1,8 @@
-/* Board page (js/views/kanban.js) and the stage totals it adds to Home. */
+/* The pipeline board on Home (js/views/kanban.js). */
 
+.board-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--sp-2) var(--sp-4); margin-bottom: var(--sp-3); }
+.board-head .dash-title { margin: 0; }
+.board-head .page-sub { margin: 2px 0 0; }
 .board-export { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .board-forecast { font-weight: var(--fw-semibold); }
 
@@ -49,9 +52,38 @@
   background: var(--surface);
   box-shadow: var(--shadow);
 }
-.board-card[draggable="true"] { cursor: grab; }
-.board-card.is-dragging { opacity: .5; }
+/* Drag (js/drag.js): the card follows the pointer by transform; a touch
+   long-press picks it up, so the page still scrolls under a quick swipe. */
+.board-card:not(.is-editing) {
+  cursor: grab;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.board-card.is-dragging {
+  position: relative;
+  z-index: 20;
+  cursor: grabbing;
+  box-shadow: var(--shadow-lg, 0 12px 28px rgb(0 0 0 / .22));
+  rotate: 1.5deg;
+  will-change: transform;
+  pointer-events: none;
+}
+body.is-dragging-any { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 .card-name { margin: 0; font-size: var(--fs-base); font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.card-open {
+  min-height: var(--tap);
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 0;
+  cursor: inherit;
+  overflow-wrap: anywhere;
+}
+@media (hover: hover) { .card-open:hover { color: var(--accent-ink); text-decoration: underline; } }
 .card-place { margin: 0; font-size: var(--fs-sm); color: var(--muted); }
 .card-value { margin: 0; font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
 .card-value.is-empty { font-weight: var(--fw-medium); color: var(--muted); }
@@ -90,6 +122,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .board-col { transition: none; }
+  .board-card.is-dragging { rotate: none; }
 }
 
 /* Filter bar above the board (kanban.js): search, status, country, city, Clear. */

@@ -117,7 +117,7 @@ test('dist over file://: the logo shows, every icon link loads, Home renders', a
   page.on('requestfailed', r => { if (r.url().startsWith('file:')) failed.push(r.url()); });
   await page.locator('#view-dashboard').click();
   await expect(page.locator('#dashboard')).toBeVisible();
-  await expect(page.locator('.status-card')).toHaveCount(4);
+  await expect(page.locator('.status-card')).toHaveCount(5); // 4 statuses + Duplicates
 
   const logo = page.locator('.brand svg.brand-logo');
   await expect(logo).toBeVisible();

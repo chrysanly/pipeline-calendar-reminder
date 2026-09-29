@@ -1,9 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="CladFlo">
-  <!-- Bow-red tile with a yellow sun rising over a white horizon: five rays, a
-       bold outer arc and a thin inner one. Thick strokes only: must read at 16px. -->
+  <!-- Bow-red tile with a bold white "C"; the sun (sinag) rises at the top
+       end of the letter, its rays slowly turning. Thick shapes: reads at 16px.
+       The rays sit behind the letter. The same drawing is inline in index.html (navbar and splash). -->
+  <style>
+    .rays { transform-origin: 44px 19px; animation: turn 14s linear infinite; }
+    @keyframes turn { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .rays { animation: none; } }
+  </style>
   <rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/>
-  <path d="M32 23V15M21 26.9L17 20M43 26.9L47 20M13 35L6.1 31M51 35L57.9 31" fill="none" stroke="#ffd400" stroke-width="4.5" stroke-linecap="round"/>
-  <path d="M17.2 43.4A15 15 0 0 1 46.8 43.4" fill="none" stroke="#ffd400" stroke-width="6.5" stroke-linecap="round"/>
-  <path d="M23.5 42.9A9 9 0 0 1 38.9 40.2" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
-  <path d="M14 53H50" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <g class="rays" fill="none" stroke="#ffd400" stroke-width="3" stroke-linecap="round">
+    <path d="M44 6.5V9.5M44 28.5V31.5M31.5 19H34.5M53.5 19H56.5M35.2 10.2L37.3 12.3M50.7 25.7L52.8 27.8M35.2 27.8L37.3 25.7M50.7 12.3L52.8 10.2"/>
+  </g>
+  <path d="M40.5 27.5A15 15 0 1 0 40.5 48.5" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="44" cy="19" r="6.5" fill="#ffd400"/>
 </svg>

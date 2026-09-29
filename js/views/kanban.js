@@ -1,5 +1,5 @@
-// Board page: every client as a card in its status column. Drag a card to
-// another column (or pick its Stage) to move the client; set a deal value per
+// The pipeline board on Home: every client as a card in its status column.
+// Drag a card to another column (or pick its Stage) to move the client; set a deal value per
 // client; filter the cards (search, status, country, city, remembered per
 // browser); export everything as CSV or Excel. Logic lives in deals.js,
 // dashboard.js and exporter.js.
@@ -9,7 +9,8 @@ import { CURRENCIES } from '../store.js';
 import { boardColumns, stageTotals, formatMoney, formatTotals, validateDeal, dealRecord } from '../deals.js';
 import { exportRows, toCsv, toXlsx, exportFileName } from '../exporter.js';
 import { loadXlsx } from '../xlsx-loader.js';
-import { el, icon, withBusy, STATUS_ICONS } from '../ui.js';
+import { el, icon, withBusy, loadingState, STATUS_ICONS } from '../ui.js';
+import { makeDraggable, hitTest, rectOf } from '../drag.js';
 import { filterBoard, parseBoardFilters, hasBoardFilters, locationTree, EMPTY_BOARD_FILTERS } from '../dashboard.js';
 import { enhanceSelect, refreshSelect } from '../select.js';
 import { markSelectMenu } from '../select-menu.js';
@@ -164,8 +165,15 @@ function stageSelect(app, card) {
 function boardCard(app, card) {
   const item = el('li', `board-card status-${card.status}`);
   item.dataset.key = card.key;
-  item.draggable = boardEdit.key !== card.key;
-  item.appendChild(el('h4', 'card-name', card.name));
+  item.classList.toggle('is-editing', boardEdit.key === card.key);
+  // The name opens the client's page (Back returns to Home); it is also where a drag starts.
+  const name = el('h4', 'card-name');
+  const open = el('button', 'card-open', card.name);
+  open.type = 'button';
+  open.title = `Open ${card.name}`;
+  open.addEventListener('click', () => app.hooks.emit('open-client', { name: card.name, from: 'home' }));
+  name.appendChild(open);
+  item.appendChild(name);
   const place = [card.city, card.country].filter(Boolean).join(', ');
   if (place) item.appendChild(el('p', 'card-place', place));
 
@@ -204,7 +212,7 @@ function renderBoard(app, section) {
   const board = section.querySelector('.board');
   board.innerHTML = '';
   if (app.state.loading) {
-    board.appendChild(el('p', 'board-loading', 'Loading…'));
+    board.appendChild(loadingState('Loading your clients…'));
     return;
   }
   const all = boardData(app);
@@ -219,37 +227,38 @@ function renderBoard(app, section) {
     : 'Set deal values to see a forecast.';
 }
 
-/** Mouse drag and drop between columns (touch and keyboard use the Stage menu). */
+/**
+ * Drag a card to another column: mouse, pen, or touch after a long-press
+ * (js/drag.js). Keyboard users have the Stage menu. Column boxes are measured
+ * once when the drag starts, not on every move.
+ */
 function bindDrag(app, board) {
-  let dragged = null;
-  const columnOf = target => target.closest && target.closest('.board-col');
-  board.addEventListener('dragstart', e => {
-    const card = e.target.closest && e.target.closest('.board-card');
-    if (!card) return;
-    dragged = card.dataset.key;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', dragged);
-    card.classList.add('is-dragging');
-  });
-  board.addEventListener('dragend', () => {
-    dragged = null;
-    for (const node of board.querySelectorAll('.is-dragging, .is-over')) node.classList.remove('is-dragging', 'is-over');
-  });
-  board.addEventListener('dragover', e => {
-    const column = columnOf(e.target);
-    if (!column || !dragged) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    for (const node of board.querySelectorAll('.board-col.is-over')) if (node !== column) node.classList.remove('is-over');
-    column.classList.add('is-over');
-  });
-  board.addEventListener('drop', e => {
-    const column = columnOf(e.target);
-    if (!column) return;
-    e.preventDefault();
-    const key = dragged || e.dataTransfer.getData('text/plain');
-    dragged = null;
-    moveClient(app, key, column.dataset.status);
+  const setOver = (ctx, index) => {
+    if (ctx.over === index) return;
+    if (ctx.over >= 0) ctx.columns[ctx.over].classList.remove('is-over');
+    if (index >= 0) ctx.columns[index].classList.add('is-over');
+    ctx.over = index;
+  };
+  const end = ctx => setOver(ctx, -1);
+  makeDraggable(board, {
+    selector: '.board-card[data-key]:not(.is-editing)',
+    // The name button starts a drag too (a tap on it still opens the client).
+    ignore: 'button:not(.card-open), select, input, textarea, a, label',
+    scroller: board,
+    onStart({ item }) {
+      const columns = [...board.querySelectorAll('.board-col')];
+      return { key: item.dataset.key, columns, rects: columns.map(rectOf), over: -1 };
+    },
+    onMove(ctx, { x, y, sx, sy }) {
+      // The cached boxes moved by the auto-scroll; the pointer did not.
+      setOver(ctx, hitTest(ctx.rects, x + sx, y + sy));
+    },
+    onDrop(ctx, { x, y, sx, sy }) {
+      const index = hitTest(ctx.rects, x + sx, y + sy);
+      end(ctx);
+      if (index >= 0) moveClient(app, ctx.key, ctx.columns[index].dataset.status);
+    },
+    onCancel: end
   });
 }
 
@@ -359,10 +368,14 @@ function exportButton(app, kind, iconName, label) {
   return button;
 }
 
-function buildBoardPage(app, section) {
-  const head = el('div', 'page-head');
+/** The board's own head (forecast and exports), filters and columns, inside Home. */
+function buildBoard(app, section) {
+  const head = el('div', 'board-head');
   const text = el('div');
-  text.append(el('h2', 'page-title', 'Board'), el('p', 'page-sub board-forecast'));
+  const title = el('h2', 'dash-title', '');
+  title.id = 'board-title';
+  title.append(icon('fa-table-columns'), ' Pipeline board');
+  text.append(title, el('p', 'page-sub board-forecast'));
   const actions = el('div', 'board-export');
   actions.append(exportButton(app, 'csv', 'fa-file-csv', 'CSV'), exportButton(app, 'xlsx', 'fa-file-excel', 'Excel'));
   head.append(text, actions);
@@ -373,15 +386,7 @@ function buildBoardPage(app, section) {
   bindDrag(app, board);
 }
 
-/** Feature entry point (js/features.js). */
+/** Feature entry point (js/features.js): the board lives on Home. */
 export function registerKanban(app) {
-  app.views.register({
-    id: 'board',
-    label: 'Board',
-    icon: 'fa-table-columns',
-    key: 'b',
-    css: 'css/kanban.css',
-    bind: buildBoardPage,
-    render: renderBoard
-  });
+  app.home.add({ bind: buildBoard, render: renderBoard });
 }

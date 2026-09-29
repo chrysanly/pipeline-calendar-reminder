@@ -8,9 +8,9 @@ import { openApp, fillForm } from './helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-test('the top nav is Home, Calendar, History, then feature pages (Board, Client, CladFlo Talk), left of the theme and settings buttons', async ({ page }) => {
+test('the top nav is Home, Calendar, History, then feature pages (Client, CladFlo Talk), left of the theme and settings buttons', async ({ page }) => {
   await openApp(page, undefined, { view: null });
-  await expect(page.locator('.topbar .views button .btn-label')).toHaveText(['Home', 'Calendar', 'History', 'Board', 'Client', 'CladFlo Talk']);
+  await expect(page.locator('.topbar .views button .btn-label')).toHaveText(['Home', 'Calendar', 'History', 'Client', 'CladFlo Talk']);
   await expect(page.locator('.topbar #view-day, .topbar #view-week, .topbar #view-month')).toHaveCount(0);
   await expect(page.locator('.topbar #add-event, .topbar #import-btn, .topbar #prev')).toHaveCount(0);
 

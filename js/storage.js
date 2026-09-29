@@ -8,7 +8,7 @@ const defaultStore = typeof localStorage !== 'undefined' ? localStorage : null;
 /**
  * Event shape:
  * { id, clientName, title, date 'YYYY-MM-DD', time 'HH:mm',
- *   notes, reminderMinutesBefore, notified }
+ *   notes, reminderMinutesBefore, notified, durationMinutes? }
  */
 
 export function createId() {
@@ -89,8 +89,26 @@ export function normalizeEvent(data) {
   }
   // Cleared from the calendar: still on Home, no popup (hideFromCalendar).
   if (data.calendarHidden) evt.calendarHidden = true;
+  // Length on the Day/Week grid; older reminders have none and read as 30 min.
+  const duration = parseEventLength(data.durationMinutes);
+  if (duration) evt.durationMinutes = duration;
   return evt;
 }
+
+export const DEFAULT_DURATION = 30;
+export const MIN_DURATION = 15;
+export const MAX_DURATION = 1440;
+
+/** A length in minutes, whole and within 15 min–24 h; null when blank or not a number. */
+export function parseEventLength(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const minutes = Math.round(Number(value));
+  if (!Number.isFinite(minutes) || minutes <= 0) return null;
+  return Math.min(MAX_DURATION, Math.max(MIN_DURATION, minutes));
+}
+
+/** How long a reminder lasts on the grid. */
+export const eventDuration = evt => parseEventLength(evt && evt.durationMinutes) || DEFAULT_DURATION;
 
 export function addEvent(list, data) {
   return list.concat(normalizeEvent(data));

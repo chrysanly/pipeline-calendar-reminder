@@ -50,11 +50,13 @@ function bigWorkbook(count) {
 
 const cell = (page, key) => page.locator(`#grid .day[data-key="${key}"]`);
 
-/** Home → a client → Add to calendar, for each name. */
+/** Client tab → a client → Add to calendar, for each name. */
 async function putOnCalendar(page, names) {
   for (const name of names) {
-    await page.locator('#view-dashboard').click();
-    await page.locator('.client-name', { hasText: name }).click();
+    await page.locator('#view-client').click();
+    const back = page.locator('#page-client .page-back');
+    if (await back.isVisible()) await back.click();
+    await page.locator('#clients-table .client-name', { hasText: name }).click();
     await expect(page.locator('#page-client .profile-name')).toHaveText(name);
     await page.locator('#page-client .calendar-add').click();
     await expect(page.locator('#banner-title')).toHaveText(`Added 1 reminder for ${name} to the calendar`);
@@ -148,8 +150,8 @@ test('History keeps the file: Re-import updates the same reminders (no duplicate
   await expect(historyItems(page).first()).toContainText('Re-import · Imported 4 reminders');
   await expect(historyItems(page).locator('.history-reimport')).toHaveCount(2);
   await page.locator('#view-dashboard').click();
-  await expect(page.locator('.client-row:not(.client-head)')).toHaveCount(4);
-  await expect(page.locator('#client-list .dup-badge')).toHaveCount(0);
+  await expect(page.locator('#home-board .board-card')).toHaveCount(4);
+  await expect(page.locator('.status-card.status-duplicate .status-count')).toHaveText('0');
   // Still raw data: Re-import does not put them on the calendar.
   await openMonth(page);
   await expect(cell(page, '2026-10-05').locator('.chip')).toHaveCount(0);
@@ -183,8 +185,8 @@ test('Month: clears only that month; Home keeps the clients, other months keep t
   await page.locator('#prev').click();
   await expect(cell(page, '2026-09-27').locator('.chip')).toHaveCount(1);
   await page.locator('#view-dashboard').click();
-  await expect(page.locator('#client-list')).toContainText('Falcon Trading');
-  await expect(page.locator('#client-list')).toContainText('Palm Holdings');
+  await expect(page.locator('#home-board')).toContainText('Falcon Trading');
+  await expect(page.locator('#home-board')).toContainText('Palm Holdings');
 
   await page.locator('#view-history').click();
   await expect(historyItems(page).first()).toContainText('Cleared 2 reminders from October 2026');
@@ -254,5 +256,5 @@ test('Clear all data keeps History and the file, so Re-import brings the reminde
   await expect(page.locator('#banner-title')).toHaveText(ALL_NEW);
   await dismissToast(page);
   await page.locator('#view-dashboard').click();
-  await expect(page.locator('#client-list')).toContainText('Falcon Trading');
+  await expect(page.locator('#home-board')).toContainText('Falcon Trading');
 });

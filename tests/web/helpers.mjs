@@ -68,3 +68,39 @@ export async function goToView(page, view, action = 'click') {
 export async function waitForImport(page) {
   await expect(page.locator('#banner:not(.is-busy):visible #banner-title')).toHaveText(/^(Imported|Import failed)/);
 }
+
+const centre = box => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+
+/** Mouse drag from the middle of `from` to `to` ({x, y} or a locator), in small steps. */
+export async function mouseDrag(page, from, to, { fromPoint } = {}) {
+  const start = fromPoint || centre(await from.boundingBox());
+  const end = typeof to.boundingBox === 'function' ? centre(await to.boundingBox()) : to;
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(start.x + 6, start.y + 6, { steps: 2 });
+  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.up();
+}
+
+/**
+ * Touch drag as a finger does it: press, hold past the long-press delay
+ * (js/drag.js), then move and lift. Pointer events with pointerType 'touch'.
+ */
+export async function touchDrag(page, from, to, { fromPoint, hold = 260 } = {}) {
+  const start = fromPoint || centre(await from.boundingBox());
+  const end = typeof to.boundingBox === 'function' ? centre(await to.boundingBox()) : to;
+  const fire = (type, point) => page.evaluate(({ type, point }) => {
+    const target = document.elementFromPoint(point.x, point.y) || document.body;
+    target.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: 'touch', isPrimary: true,
+      clientX: point.x, clientY: point.y, button: 0, buttons: type === 'pointerup' ? 0 : 1
+    }));
+  }, { type, point });
+  await fire('pointerdown', start);
+  await page.waitForTimeout(hold);
+  for (let i = 1; i <= 8; i++) {
+    await fire('pointermove', { x: start.x + ((end.x - start.x) * i) / 8, y: start.y + ((end.y - start.y) * i) / 8 });
+    await page.waitForTimeout(20);
+  }
+  await fire('pointerup', end);
+}

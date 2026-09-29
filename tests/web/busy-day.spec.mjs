@@ -1,5 +1,6 @@
-// A day with many reminders: week/day columns scroll inside instead of
-// stretching the page, and "+N more" lists the whole day in the sheet.
+// A day with many reminders: the Day/Week hour grid scrolls inside instead of
+// stretching the page, overlapping reminders sit side by side, and "+N more"
+// lists the whole day in the month's sheet.
 
 import { test, expect } from './fixtures.mjs';
 import { STORAGE_KEY } from './helpers.mjs';
@@ -43,8 +44,8 @@ for (const view of ['week', 'day']) {
     const day = page.locator(`#grid .day[data-key="${BUSY}"]`);
     await expect(day.locator('.chip')).toHaveCount(30);
 
-    const chips = day.locator('.chips');
-    const box = await chips.evaluate(n => ({
+    // The hours scroll inside the grid.
+    const box = await page.locator('#grid .tg-scroll').evaluate(n => ({
       overflowY: getComputedStyle(n).overflowY,
       scrollHeight: n.scrollHeight,
       clientHeight: n.clientHeight
@@ -62,6 +63,11 @@ for (const view of ['week', 'day']) {
       const heights = await page.locator('#grid .day').evaluateAll(ns => ns.map(n => Math.round(n.getBoundingClientRect().height)));
       expect(new Set(heights).size).toBe(1);
     }
+
+    // 08:00 and 08:15 overlap (30 minutes each): side by side, half the width each.
+    const [first, second] = await Promise.all(['m0', 'm1'].map(id => day.locator(`.chip[data-id="${id}"]`).boundingBox()));
+    expect(Math.abs(first.y - second.y)).toBeGreaterThan(5);
+    expect(second.x).toBeGreaterThan(first.x + first.width / 2);
 
     // The last reminder can be scrolled to and opened.
     const last = day.locator('.chip-title').last();

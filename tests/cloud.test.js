@@ -132,7 +132,7 @@ later('cloudBackend.write stores each reminder at users/{uid}/events/{id} withou
   const db = fakeDb();
   const cloud = cloudBackend(db, 'uid-1');
   const counts = await cloud.write([], [a, b]);
-  assertDeepEqual(counts, { upserts: 2, deletes: 0 });
+  assertDeepEqual([counts.upserts, counts.deletes], [2, 0]);
   assertDeepEqual([...db.docs.keys()], ['users/uid-1/events/a', 'users/uid-1/events/b']);
   assert(!('id' in db.docs.get('users/uid-1/events/a')), 'id is the document id, not a field');
 });
@@ -142,7 +142,7 @@ later('cloudBackend.write deletes removed reminders and skips unchanged ones', a
   const cloud = cloudBackend(db, 'uid-1');
   await cloud.write([], [a, b]);
   const counts = await cloud.write([a, b], [{ ...b, title: 'Moved' }]);
-  assertDeepEqual(counts, { upserts: 1, deletes: 1 });
+  assertDeepEqual([counts.upserts, counts.deletes], [1, 1]);
   assertDeepEqual([...db.docs.keys()], ['users/uid-1/events/b']);
   assertEqual(db.docs.get('users/uid-1/events/b').title, 'Moved');
   assertEqual((await cloud.write([b], [b])).upserts, 0);
@@ -154,6 +154,34 @@ later('cloudBackend.write splits big imports into batches under the 500-write li
   await cloudBackend(db, 'uid-1').write([], many);
   assertDeepEqual(db.commits, [450, 450, 100]);
   assertEqual(db.docs.size, 1000);
+});
+
+later('cloudBackend.write resolves once the change is on the device, before the server answers', async () => {
+  const db = fakeDb();
+  let answer;
+  db.batch = () => ({
+    set: () => {},
+    delete: () => {},
+    commit: () => new Promise(resolve => { answer = resolve; })
+  });
+  const result = await cloudBackend(db, 'uid-1').write([], [a]);
+  assertEqual(result.upserts, 1);
+  let confirmed = false;
+  result.confirmed.then(() => { confirmed = true; });
+  await Promise.resolve();
+  assert(!confirmed, 'not confirmed until the server answers');
+  answer();
+  await result.confirmed;
+  assert(confirmed, 'confirmed once the server answers');
+});
+
+later('cloudBackend.write: a refused write rejects `confirmed`, not the write', async () => {
+  const db = fakeDb();
+  db.batch = () => ({ set: () => {}, delete: () => {}, commit: () => Promise.reject(new Error('permission-denied')) });
+  const result = await cloudBackend(db, 'uid-1').write([], [a]);
+  let error = null;
+  await result.confirmed.catch(err => { error = err; });
+  assertEqual(error && error.message, 'permission-denied');
 });
 
 later('cloudBackend.fetchServer returns normalized reminders with their ids', async () => {

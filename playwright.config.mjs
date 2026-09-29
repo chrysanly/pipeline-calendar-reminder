@@ -5,12 +5,18 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 8123;
 
+// Each run gets its own artifacts folder: Playwright empties outputDir when a
+// run starts, so two runs at once (dev and QA) would delete each other's trace
+// files mid-test (ENOENT). Set once in the runner; workers inherit the env.
+process.env.PW_RUN_ID ??= `${Date.now()}-${process.pid}`;
+
 export default defineConfig({
   testDir: 'tests/web',
   testMatch: '**/*.spec.mjs',
   fullyParallel: false,
   workers: 1,
   reporter: [['list']],
+  outputDir: `test-results/run-${process.env.PW_RUN_ID}`,
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: 'retain-on-failure'

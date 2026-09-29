@@ -236,3 +236,17 @@ Nothing is deployed. This commit is work in progress on `main`; keys stay out of
 ## Notes
 - Features plug in through `js/features.js` (one line each); pages via `app.views.register`, events via `app.hooks`.
 - Don't run two Playwright runs at once: they share `test-results/` and break each other's trace files.
+
+## Home board, hour grid, saving, logo (29 Sep 2026, home PC)
+- **Board on Home:** `js/views/kanban.js` mounts into `#home-board` through `app.home.add({bind, render})`;
+  no Board page or nav button, B opens Home. The Home table, Locations and pager are gone (the Client
+  tab keeps its own table). Drag uses `js/drag.js` (pointer events; touch long-press 180 ms).
+- **Day/Week hour grid:** `js/time-grid.js` (48px an hour, all-day row, overlaps side by side, now line).
+  Drag moves (15-min snap, Week across days), the bottom edge resizes. Optional `durationMinutes`
+  on reminders (default 30, `eventDuration` in `js/storage.js`); Length field in the form.
+- **Saving indicator:** `js/save-status.js` tracks each save; `collectionBackend.write` resolves once
+  the change is on the device and returns `confirmed` for the server's answer. Syncing… until then,
+  10 s safety timeout, Not saved + Retry on a refusal.
+- **Logo and splash:** C with the sun at its top (`assets/logo.svg`, inline in `index.html`); the
+  `#app-loading` splash fades after the first render (min 600 ms). `loadingState()` in `js/ui.js`.
+- Top-level names must be unique across modules (the build bundles them flat).

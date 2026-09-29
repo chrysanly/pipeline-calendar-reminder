@@ -183,14 +183,14 @@ test('without sign-in or a saved token, the panel asks for the access token; sav
   expect(requests[0].headers['x-app-token']).toBe('fresh-token');
 });
 
-test('status alerts: moving a client on the Board shows a notification and emails through /notify', async ({ page }) => {
+test('status alerts: moving a client on the Home board shows a notification and emails through /notify', async ({ page }) => {
   const requests = await mockWorker(page, { '/notify': [202, { sent: true }] });
   await openPanel(page);
   await panel(page).locator('.ai-settings summary').click();
   await panel(page).getByLabel('Email me (through the Worker)').check();
   expect(JSON.parse(await page.evaluate(() => localStorage.getItem('cladflo.alerts.v1')))).toEqual({ browser: true, email: true, statuses: ['active', 'inactive'] });
 
-  await page.locator('#view-board').click();
+  await page.locator('#view-dashboard').click();
   await page.getByLabel('Stage for Acme Ltd.').selectOption('potential'); // not a chosen status: no alert
   await page.getByLabel('Stage for Acme Ltd.').selectOption('active');
   await expect.poll(() => requests.length).toBe(1);
@@ -204,7 +204,7 @@ test('a failed email alert says so in the banner', async ({ page }) => {
   await openPanel(page);
   await panel(page).locator('.ai-settings summary').click();
   await panel(page).getByLabel('Email me (through the Worker)').check();
-  await page.locator('#view-board').click();
+  await page.locator('#view-dashboard').click();
   await page.getByLabel('Stage for Falcon Trading').selectOption('inactive');
   await expect(page.locator('#banner-title')).toHaveText('Email alert not sent');
   await expect(page.locator('#banner-body')).toHaveText('Email alerts are not set up on the Worker.');

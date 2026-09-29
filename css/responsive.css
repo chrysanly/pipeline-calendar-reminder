@@ -99,30 +99,11 @@
   .grid.view-month .chip-title { display: block; width: 100%; font-size: inherit; }
   .grid.view-month .more { padding: 0 3px; font-size: 10.5px; }
 
-  /* Week and day: a vertical list, the date on the left, reminders on the right. */
-  .grid.view-week, .grid.view-day { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .grid.view-week .day, .grid.view-day .day {
-    display: grid;
-    grid-template-columns: var(--tap) minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
-    column-gap: 10px;
-    align-items: start;
-    height: auto;
-    min-height: 60px;
-    max-height: 60dvh;
-    padding: var(--sp-2);
-  }
-  .grid:not(.view-month) .day-name {
-    display: block;
-    grid-column: 1;
-    font-size: 11px;
-    font-weight: var(--fw-bold);
-    text-align: center;
-    color: var(--muted);
-  }
-  .grid:not(.view-month) .day-number { display: inline-flex; grid-column: 1; justify-self: center; }
-  .grid:not(.view-month) .chips { grid-column: 2; grid-row: 1 / span 2; max-height: calc(60dvh - 2 * var(--sp-2)); margin-top: 0; }
-  .grid:not(.view-month) .chip-title { padding: 4px 0; }
+  /* Day and Week hour grid: a narrower time gutter. */
+  .grid.time-grid { --gutter: 38px; }
+  .grid.time-grid.view-week .chip.tg-event { padding-inline: 3px; font-size: 10px; }
+  .grid.time-grid.view-week .chip-client, .grid.time-grid.view-week .chip-time .chip-dup { display: none; }
+  .tg-scroll { height: clamp(320px, calc(100dvh - 230px), 900px); }
 
   /* Details panel and modals: bottom sheets with a grab handle. */
   .panel {

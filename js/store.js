@@ -86,7 +86,9 @@ export function listBackend(name, { db = null, uid = null, store } = {}) {
  * collection (load and/or live subscribe); every change shows at once through
  * onChange(name) and is then written, errors going to onError.
  */
-export function createStore({ names = COLLECTIONS, onChange = () => {}, onError = () => {}, now = () => new Date() } = {}) {
+export function createStore({
+  names = COLLECTIONS, onChange = () => {}, onError = () => {}, now = () => new Date(), track = run => run()
+} = {}) {
   const lists = Object.fromEntries(names.map(name => [name, []]));
   let backends = {};
   let unsubscribers = [];
@@ -103,8 +105,11 @@ export function createStore({ names = COLLECTIONS, onChange = () => {}, onError 
     onChange(name);
     const backend = backends[name];
     if (!backend) return Promise.resolve();
+    // A retry (from `track`) writes the list as it is by then.
+    let tries = 0;
+    const run = () => (backends[name] === backend ? backend.write(prev, tries++ ? lists[name] : next) : null);
     return Promise.resolve()
-      .then(() => backend.write(prev, next))
+      .then(() => track(run))
       .catch(err => onError(err));
   }
 

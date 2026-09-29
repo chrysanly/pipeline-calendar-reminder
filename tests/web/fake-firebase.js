@@ -84,7 +84,16 @@
       return {
         set(ref, data) { ops.push(['set', ref.path, data]); },
         delete(ref) { ops.push(['delete', ref.path]); },
-        async commit() { apply(ops, 'app'); }
+        // Applied on the device at once, like Firestore; the promise is the server's answer.
+        commit() {
+          apply(ops, 'app');
+          const hold = window.__fakeHold || {};
+          // window.__fakeHold.serverAck: the server never answers (the write stays pending).
+          if (hold.serverAck) return new Promise(() => {});
+          // window.__fakeHold.denyBatch: the server refuses the write (rules, quota).
+          if (hold.denyBatch) return Promise.reject(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' }));
+          return Promise.resolve();
+        }
       };
     },
     enablePersistence: () => Promise.resolve()

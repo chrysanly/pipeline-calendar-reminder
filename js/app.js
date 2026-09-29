@@ -23,11 +23,15 @@ import {
   renderCalendar, renderPanel, isPanelOpen, swipeDirection, COMPACT_QUERY,
   openModal, closeModal, isModalOpen, readForm, bindForm, withBusy, showView, mountView
 } from './ui.js';
+import { bindTimeGrid } from './time-grid.js';
 import { showBanner, bindBanner, reportError, runWithToast } from './banner.js';
 import { installSelectMenus } from './select-menu.js';
 import { createDatePicker } from './datepicker.js';
-import { renderAuth, bindAccountMenu, isAccountMenuOpen, closeAccountMenu, trackSave } from './topbar-ui.js';
-import { renderDashboard, bindDashboard, loadPageSize, savePageSize } from './dashboard-ui.js';
+import {
+  renderAuth, bindAccountMenu, isAccountMenuOpen, closeAccountMenu, renderSaveStatus, bindSaveRetry
+} from './topbar-ui.js';
+import { createSaveTracker } from './save-status.js';
+import { renderDashboard } from './dashboard-ui.js';
 import { renderHistory, bindHistory } from './history-ui.js';
 import { renderMinutes, bindMinutes, prefillMinutes } from './minutes-ui.js';
 import { bindSettings, openSettings, closeSettings, isSettingsOpen } from './settings-ui.js';
@@ -74,8 +78,6 @@ const state = {
   openId: null,
   openDay: null, // the day whose full list the sheet shows ("+N more")
   events: backend ? backend.load() : [],
-  // Home filters (status, country/city, search) and the client list page.
-  dash: { status: null, country: null, city: null, search: '', page: 1, pageSize: loadPageSize() },
   // Cloud mode until the first snapshot (or sign-out): 'Loading…', not 'No clients'.
   loading: mode === 'cloud',
   // Saved meeting minutes and the History log, newest first (record-store.js).
@@ -95,8 +97,17 @@ let cloudDb = null;
 // 'store-change' {name} (null: every collection).
 const hooks = createHooks();
 
+const saveErrorText = err => `${err && err.message ? err.message : String(err)} Check your connection, then try again.`;
+
+// Every save (reminders, records, collections) on its own, for the top bar.
+const saves = createSaveTracker({
+  onChange: renderSaveStatus,
+  onError: err => reportError('Could not save your change', saveErrorText(err))
+});
+
 // Feature collections (clients, tasks, invoices, settings, …).
 const store = createStore({
+  track: saves.track,
   onChange(name) {
     hooks.emit('store-change', { name });
     render();
@@ -105,6 +116,7 @@ const store = createStore({
 });
 
 const records = createRecordStore({
+  track: saves.track,
   onChange(name, list) {
     state[name] = list;
     render();
@@ -145,6 +157,19 @@ const handlers = {
     state.openId = null;
     render();
   },
+  /** Day/Week grid: a reminder dragged to a new day and time, or to a new length. */
+  onMoveEvent(id, patch) {
+    const evt = findEvent(state.events, id);
+    if (!evt) return;
+    const moved = { ...evt, ...patch };
+    // A moved reminder fires again at its new time.
+    const timeChanged = 'time' in patch || 'date' in patch;
+    commit(updateEvent(state.events, id, { ...patch, ...(timeChanged ? { notified: false } : {}), updatedAt: new Date().toISOString() }));
+    if (patch.date) state.selectedKey = patch.date;
+    const detail = timeChanged ? `Moved to ${reminderWhen(moved)}` : `Length ${patch.durationMinutes} min`;
+    log('edit', 'reminder', evt.title, evt.clientName, detail);
+    if (reminders) reminders.check();
+  },
   onBackToDay() {
     state.openId = null;
     render();
@@ -159,13 +184,6 @@ const handlers = {
     if (state.openId === id) state.openId = null;
     commit(deleteEvent(state.events, id));
     log('delete', 'reminder', evt.title, evt.clientName, reminderWhen(evt));
-  },
-  pageSize: () => state.dash.pageSize,
-  onDashFilter(patch) {
-    // A new filter or page size starts again from page 1.
-    state.dash = { ...state.dash, page: 1, ...patch };
-    if ('pageSize' in patch) savePageSize(patch.pageSize);
-    render();
   },
   onHistoryFilter(patch) {
     state.historyFilter = { ...state.historyFilter, ...patch };
@@ -253,8 +271,6 @@ const handlers = {
   }
 };
 
-const saveErrorText = err => `${err && err.message ? err.message : String(err)} Check your connection, then try again.`;
-
 /**
  * Show the change at once, then save only what changed to the backend.
  * @returns {Promise<void>} settles when the save is done (a failure is reported, not thrown)
@@ -265,7 +281,11 @@ function commit(events) {
   render();
   hooks.emit('events-change', { prev, next: events });
   if (!backend) return Promise.resolve();
-  return trackSave(backend.write(prev, events)).catch(err => {
+  const target = backend;
+  let tries = 0;
+  // A retry writes what is on screen by then, so it never undoes a later edit.
+  const run = () => (backend === target ? target.write(prev, tries++ ? state.events : events) : null);
+  return saves.track(run).catch(err => {
     reportError('Could not save your change', saveErrorText(err));
   });
 }
@@ -281,6 +301,9 @@ function receive(events) {
   if (reminders) reminders.check();
 }
 
+// What features add to Home (the pipeline board), in order: {bind, render}.
+const homeParts = [];
+
 // Features render only once the app has registered them all.
 let started = false;
 
@@ -290,7 +313,10 @@ function render() {
   if (feature) {
     showView(state.view);
     feature.render(app, feature.section);
-  } else if (state.view === 'dashboard') renderDashboard(state, handlers);
+  } else if (state.view === 'dashboard') {
+    renderDashboard(state);
+    for (const part of homeParts) part.render(app, part.section);
+  }
   else if (state.view === 'history') renderHistory(state, handlers);
   else if (state.view === 'minutes') renderMinutes(state, handlers);
   else renderCalendar(state, handlers);
@@ -344,11 +370,15 @@ function goToToday() {
 function bindSwipe(target) {
   let start = null;
   target.addEventListener('pointerdown', e => {
-    start = e.pointerType === 'mouse' || !e.isPrimary ? null : { x: e.clientX, y: e.clientY };
+    start = e.pointerType === 'mouse' || !e.isPrimary || e.target.closest('.tg-event') ? null : { x: e.clientX, y: e.clientY };
   });
   target.addEventListener('pointercancel', () => { start = null; });
   target.addEventListener('pointerup', e => {
-    if (!start) return;
+    // A reminder being dragged on the Day/Week grid is not a swipe.
+    if (!start || document.body.classList.contains('is-dragging-any')) {
+      start = null;
+      return;
+    }
     const delta = swipeDirection(e.clientX - start.x, e.clientY - start.y);
     start = null;
     if (delta) move(delta);
@@ -367,9 +397,11 @@ function bind() {
   document.querySelector('#view-calendar').addEventListener('click', () => setView(state.calendarView));
   document.querySelector('#theme-toggle').addEventListener('click', toggleTheme);
   bindAccountMenu();
+  bindSaveRetry(() => saves.retry());
   document.querySelector('#panel-close').addEventListener('click', closePanel);
   document.querySelector('#panel-backdrop').addEventListener('click', closePanel);
   bindSwipe(document.querySelector('.calendar'));
+  bindTimeGrid(document.querySelector('#grid'), handlers);
   // Crossing the phone breakpoint changes the month layout (chip limit, agenda).
   if (typeof matchMedia === 'function') {
     const compact = matchMedia(COMPACT_QUERY);
@@ -395,7 +427,6 @@ function bind() {
   createDatePicker(document.querySelector('#event-form [name="date"]'), { label: 'Choose the reminder date' });
   // Every select[data-picker] (statuses, Remind me, History filters) opens the app's menu.
   installSelectMenus();
-  bindDashboard(handlers);
   bindHistory(handlers);
   bindMinutes(handlers);
   bindSettings(handlers);
@@ -446,7 +477,7 @@ function bind() {
     if (e.key === 'ArrowLeft') move(-1);
     else if (e.key === 'ArrowRight') move(1);
     else if (key === 't') goToToday();
-    else if (key === 'h') setView('dashboard');
+    else if (key === 'h' || key === 'b') setView('dashboard'); // B: the board, on Home
     else if (key === 'c') setView(state.calendarView);
     else if (key === 'd') setView('day');
     else if (key === 'w') setView('week');
@@ -580,6 +611,15 @@ const app = {
   /** Business settings (settings/app) over the .env Worker URL over the defaults. */
   settings: () => readSettings(store.all('settings'), APP_CONFIG),
   clients: () => buildClients(state.events),
+  home: {
+    /** Add a part to Home: bind(app, section) once, render(app, section) with Home. */
+    add(part) {
+      part.section = document.querySelector('#home-board');
+      part.bind(app, part.section);
+      homeParts.push(part);
+      return part;
+    }
+  },
   views: {
     /** Add a page with a nav button; see js/views/registry.js for the fields. */
     register(view) {
@@ -603,6 +643,24 @@ const app = {
   log,
   notify: (title, body = '') => showBanner(title, body)
 };
+
+// The splash stays at least this long, so a fast load does not just flash it.
+const SPLASH_MIN_MS = 600;
+
+/** The first view is drawn: fade the splash out and remove it. */
+function hideSplash() {
+  const splash = document.querySelector('#app-loading');
+  if (!splash) return;
+  // The app is usable at once; the splash only finishes its short show on top.
+  splash.classList.add('is-done');
+  const wait = Math.max(0, SPLASH_MIN_MS - performance.now());
+  setTimeout(() => {
+    splash.classList.add('is-leaving');
+    // transitionend does not fire with reduced motion (no transition): a timer too.
+    splash.addEventListener('transitionend', () => splash.remove(), { once: true });
+    setTimeout(() => splash.remove(), 400);
+  }, wait);
+}
 
 /** Each feature on its own: one that throws is reported and the rest still load. */
 function registerFeatures() {
@@ -630,8 +688,7 @@ else {
 }
 started = true;
 render();
-// The page's own "Loading…" line: the app has drawn its first view.
-document.querySelector('#app-loading').remove();
+hideSplash();
 startReminders();
 requestPermission();
 

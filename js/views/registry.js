@@ -4,7 +4,7 @@
 
 /** Page ids the app already uses, and the keyboard shortcuts it already has. */
 export const BUILT_IN_VIEWS = ['dashboard', 'calendar', 'day', 'week', 'month', 'minutes', 'history', 'settings'];
-export const RESERVED_KEYS = ['h', 'c', 'd', 'w', 'm', 'n', 'l', 't'];
+export const RESERVED_KEYS = ['h', 'b', 'c', 'd', 'w', 'm', 'n', 'l', 't'];
 
 const VIEW_ID_RE = /^[a-z][a-z0-9-]*$/;
 
