@@ -2,6 +2,8 @@
 // Firestore at chat/main/messages (firestore.rules lets only the allowed
 // emails read and post). js/views/chat.js is the page.
 
+import { nextResetAt, localTime, untilText } from './chat-quota.js';
+
 export const CHAT_ROOM = 'main';
 export const CHAT_MAX = 1000;
 export const CHAT_PAGE = 100;
@@ -274,18 +276,45 @@ export const chatPath = (room = CHAT_ROOM) => ['chat', room, 'messages'];
 
 export const CHAT_NOT_ALLOWED = 'Your email isn’t on the CladFlo Talk list, or the CladFlo Talk rules aren’t deployed yet.';
 export const CHAT_OFFLINE = 'Can’t reach Firestore. Check your connection, then try again.';
+export const CHAT_QUOTA = 'Firebase’s free daily limit is used up.';
+
+/** The quota message with the time it resets (midnight Pacific, in local time). */
+export function quotaText(now = new Date()) {
+  const reset = nextResetAt(now);
+  return `${CHAT_QUOTA} Chat resumes at ${localTime(reset)} (in ${untilText(reset - now)}), or upgrade the plan.`;
+}
+
+/** Billed document reads in a snapshot: the changed ones, none from the local cache. */
+export function snapshotReads(snap) {
+  if (!snap || (snap.metadata && snap.metadata.fromCache)) return 0;
+  if (typeof snap.docChanges === 'function') return snap.docChanges().length;
+  return snap.docs ? snap.docs.length : 0;
+}
+
+/** A Firestore error (or log entry) saying the daily quota is used up. */
+export function isQuotaError(err) {
+  if (!err || typeof err !== 'object') return false;
+  const code = String(err.code || '').replace(/^firestore\//, '');
+  return code === 'resource-exhausted' || /quota|resource-exhausted/i.test(String(err.message || ''));
+}
 
 /** A send that gets no answer from Firestore in this time counts as offline. */
 export const CHAT_SEND_TIMEOUT = 15000;
 
-/** Why a chat read or send failed, in plain words (Firestore error codes). */
-export function chatErrorText(err, online = true) {
+/**
+ * Why a chat read or send failed, in plain words (Firestore error codes).
+ * `quotaHit`: Firestore already reported the daily quota, so a send that times
+ * out is the quota, not the connection.
+ */
+export function chatErrorText(err, online = true, quotaHit = false, now = new Date()) {
   const code = err && err.code ? String(err.code).replace(/^firestore\//, '') : '';
-  const message = err && err.message ? String(err.message) : String(err || '');
+  const message = err && typeof err === 'object' ? String(err.message || '') : String(err || '');
+  if (online && (quotaHit || isQuotaError(err))) return quotaText(now);
   if (!online || code === 'unavailable' || code === 'deadline-exceeded' || /offline|network/i.test(message)) return CHAT_OFFLINE;
   if (code === 'permission-denied' || /insufficient permissions/i.test(message)) return CHAT_NOT_ALLOWED;
   if (code === 'unauthenticated') return 'Your sign-in has expired: sign out, sign in again, then retry.';
-  return message || 'Something went wrong. Try again.';
+  const text = message || 'Something went wrong. Try again.';
+  return code ? `${text} (code: ${code})` : text;
 }
 
 /** `promise`, or a deadline-exceeded error after `ms` (a write offline never settles). */

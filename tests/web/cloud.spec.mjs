@@ -94,7 +94,9 @@ test('the account dropdown shows the name and Sign out; Escape and a click outsi
   await expect(button).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#account-name')).toHaveText('Test User');
   await expect(page.locator('#account-email')).toHaveText('test@example.com');
-  await expect(page.locator('#sign-out')).toBeFocused();
+  // History, theme and Settings sit between who you are and Sign out; the first item gets focus.
+  await expect(menu.locator('[role="menuitem"]')).toHaveText(['History', 'Dark mode', 'One Piece theme', 'Settings', 'Sign out']);
+  await expect(page.locator('#view-history')).toBeFocused();
   await expect(page.locator('#sign-out .fa-right-from-bracket')).toHaveCount(1);
   await page.screenshot({ path: join(here, '..', '..', 'test-results', 'design', 'account-menu.png') });
 
@@ -106,7 +108,13 @@ test('the account dropdown shows the name and Sign out; Escape and a click outsi
 
   await signOut(page);
   await expect(page.locator('#signed-out')).toBeVisible();
-  await expect(page.locator('#account')).toBeHidden();
+  // Signed out: Sign in, and the menu stays for History, theme and Settings, with no name.
+  await expect(page.locator('#sign-in')).toBeVisible();
+  await expect(page.locator('#user-name')).toHaveText('Menu');
+  await button.click();
+  await expect(page.locator('.account-info')).toBeHidden();
+  await expect(page.locator('#sign-out')).toBeHidden();
+  await expect(page.locator('#settings-btn')).toBeVisible();
 });
 
 test('signed out: the sign-in prompt shows and the calendar is hidden', async ({ page }) => {
@@ -320,14 +328,16 @@ test('signing out clears the calendar and shows the prompt again', async ({ page
   await signOut(page);
   await expect(page.locator('#signed-out')).toBeVisible();
   await expect(page.locator('#grid .chip')).toHaveCount(0);
-  await expect(page.locator('#user-name')).toBeHidden();
+  await expect(page.locator('#user-name')).toHaveText('Menu'); // no name; the menu stays
 });
 
 test('empty config: local mode even with the SDK loaded, no sign-in, no banner', async ({ page }) => {
   await openCloud(page, { config: {} });
   await page.waitForSelector('#grid .day');
 
-  await expect(page.locator('#auth-area')).toBeHidden();
+  // No sign-in; the menu (History, theme, Settings) still shows, with no name.
+  await expect(page.locator('#sign-in')).toBeHidden();
+  await expect(page.locator('#user-name')).toHaveText('Menu');
   await expect(page.locator('#signed-out')).toBeHidden();
   await expect(page.locator('.calendar')).toBeVisible();
   await expect(page.locator('#banner')).toBeHidden();
@@ -342,7 +352,9 @@ test('?backend=local forces local mode even with a config', async ({ page }) => 
   await openCloud(page, { url: '/index.html?backend=local' });
   await page.waitForSelector('#grid .day');
 
-  await expect(page.locator('#auth-area')).toBeHidden();
+  // No sign-in; the menu (History, theme, Settings) still shows, with no name.
+  await expect(page.locator('#sign-in')).toBeHidden();
+  await expect(page.locator('#user-name')).toHaveText('Menu');
   await expect(page.locator('.calendar')).toBeVisible();
   await expect(page.locator('#banner')).toBeHidden();
   expect(await page.evaluate(() => window.__fake.config)).toBeNull();
@@ -375,7 +387,9 @@ test('config set but the SDK failed to load: local mode with a "Working offline"
   await openCloud(page, { sdk: false });
   await page.waitForSelector('#grid .day');
 
-  await expect(page.locator('#auth-area')).toBeHidden();
+  // No sign-in; the menu (History, theme, Settings) still shows, with no name.
+  await expect(page.locator('#sign-in')).toBeHidden();
+  await expect(page.locator('#user-name')).toHaveText('Menu');
   await expect(page.locator('.calendar')).toBeVisible();
   await expect(page.locator('#banner-title')).toHaveText('Working offline');
 });

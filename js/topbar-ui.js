@@ -1,4 +1,5 @@
-// Top bar, right side: the account dropdown, the sign-in button and the
+// Top bar: the logo (goes Home), the account dropdown (History, theme,
+// Settings, and who you are with Sign out), the sign-in button and the
 // "Saving… / Syncing… / Saved" indicator.
 
 import { $ } from './ui.js';
@@ -10,19 +11,22 @@ import { SAVE_LABELS } from './save-status.js';
  */
 export function renderAuth(status, user) {
   document.body.dataset.auth = status;
-  $('#auth-area').hidden = status === 'local';
+  const signedIn = status === 'signed-in';
   $('#sign-in').hidden = status !== 'signed-out';
-  $('#account').hidden = status !== 'signed-in';
   $('#signed-out').hidden = status !== 'signed-out';
-  if (status !== 'signed-in') closeAccountMenu();
+  // The menu (History, theme, Settings) is always there; who you are and Sign out only when signed in.
+  $('#account').classList.toggle('is-guest', !signedIn);
+  $('.account-info').hidden = !signedIn;
+  $('#sign-out').hidden = !signedIn;
+  if (!signedIn) closeAccountMenu();
 
-  const name = user ? (user.displayName || user.email || 'Signed in') : '';
+  const name = signedIn && user ? (user.displayName || user.email || 'Signed in') : '';
   const initial = name.trim().charAt(0).toUpperCase();
-  $('#user-name').textContent = name;
-  $('#user-name').hidden = status !== 'signed-in';
-  $('#account-btn').title = name;
-  $('#account-btn').setAttribute('aria-label', name ? `Account: ${name}` : 'Account');
-  $('#account-initial').textContent = initial;
+  $('#user-name').textContent = name || 'Menu';
+  $('#account-btn').title = name || 'Menu';
+  $('#account-btn').setAttribute('aria-label', name ? `Account: ${name}` : 'Menu: History, theme and Settings');
+  if (initial) $('#account-initial').textContent = initial;
+  else $('#account-initial').innerHTML = '<i class="fa-solid fa-bars" aria-hidden="true"></i>';
   $('#account-menu-initial').textContent = initial;
   $('#account-name').textContent = name;
   $('#account-email').textContent = user && user.email && user.email !== name ? user.email : '';
@@ -40,17 +44,28 @@ export function closeAccountMenu() {
 function openAccountMenu() {
   $('#account-menu').hidden = false;
   $('#account-btn').setAttribute('aria-expanded', 'true');
-  $('#sign-out').focus();
+  $('#account-menu [role="menuitem"]').focus();
 }
 
-/** The account button toggles its menu; a click elsewhere closes it. */
+/** The account button toggles its menu; a click elsewhere, or on an item, closes it. */
 export function bindAccountMenu() {
   $('#account-btn').addEventListener('click', () => {
     if (isAccountMenuOpen()) closeAccountMenu();
     else openAccountMenu();
   });
+  $('#account-menu').addEventListener('click', e => {
+    if (e.target.closest('[role="menuitem"]')) closeAccountMenu();
+  });
   document.addEventListener('click', e => {
     if (isAccountMenuOpen() && !e.target.closest('#account')) closeAccountMenu();
+  });
+}
+
+/** The logo opens Home, from the top. */
+export function bindBrandLink() {
+  $('#brand-link').addEventListener('click', () => {
+    $('#view-dashboard').click();
+    window.scrollTo(0, 0);
   });
 }
 

@@ -8,5 +8,6 @@ import { registerClientProfile } from './views/client.js';
 import { registerAiPanel } from './views/ai-panel.js';
 import { registerStatusAlerts } from './notify.js';
 import { registerChat } from './views/chat.js';
+import { registerTodos } from './views/todos.js';
 
-export const FEATURES = [registerBusinessSettings, registerKanban, registerClientProfile, registerAiPanel, registerStatusAlerts, registerChat];
+export const FEATURES = [registerBusinessSettings, registerKanban, registerClientProfile, registerAiPanel, registerStatusAlerts, registerChat, registerTodos];

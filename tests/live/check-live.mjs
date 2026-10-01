@@ -29,8 +29,10 @@ for (const [name, options] of shots) {
       brand: document.querySelector('.brand')?.textContent.trim(),
       signIn: visible('#sign-in') && visible('#prompt-sign-in'),
       minutes: visible('#view-minutes'),
-      history: visible('#view-history'),
-      settings: visible('#settings-btn'),
+      // History, theme and Settings live in the profile menu (closed on load): present, and the menu button shows.
+      menu: visible('#account-btn'),
+      history: !!document.querySelector('#account-menu #view-history'),
+      settings: !!document.querySelector('#account-menu #settings-btn'),
       signedOut: visible('#signed-out'),
       dashboard: visible('#dashboard') || visible('.status-card'),
       label: document.querySelector('#month-label')?.textContent.trim(),

@@ -101,3 +101,185 @@
   #groq-save { grid-column: 1 / -1; }
   .danger-btn { width: 100%; }
 }
+
+/* CladFlo Talk: daily quota estimate above the composer; locked at the limit.
+   Colours come from the theme tokens, so light and dark both follow. */
+.chat-quota {
+  margin: 0 0 var(--sp-2); font-size: var(--fs-xs); color: var(--muted);
+  overflow-wrap: anywhere; cursor: help;
+}
+.chat-quota.is-locked {
+  padding: var(--sp-2) var(--sp-3); color: var(--danger); font-weight: var(--fw-bold);
+  background: var(--surface-2); border: var(--stroke) solid var(--danger); border-radius: var(--radius);
+}
+.chat-form.is-locked .chat-input,
+.chat-form.is-locked .chat-send,
+.chat-form.is-locked .chat-attach { opacity: .55; cursor: not-allowed; }
+.chat-form.is-locked .chat-input { background: var(--surface-2); }
+
+/* ---------- To-Do (js/views/todos.js, todo-compose.js) ----------
+   Notes in folder cards. Theme tokens only, so Hello Kitty / One Piece and
+   light / dark all follow. Every control keeps a 44px tap target. */
+.todo-notice {
+  margin: var(--sp-4) 0 0; padding: var(--sp-3) var(--sp-4);
+  background: var(--accent-soft); color: var(--accent-ink);
+  border: var(--stroke) solid var(--border); border-radius: var(--radius);
+}
+.todo-notice[hidden], .todo-card[hidden], .todo-empty[hidden], .todo-chips[hidden], .todo-group .todo-list[hidden] { display: none; }
+.todo-card { display: grid; gap: var(--sp-4); margin-top: var(--sp-5); }
+.todo-status { margin: 0; }
+.todo-status:empty { display: none; }
+
+/* The composer: a Folder row over one box holding the note, its files and a tool bar. */
+.todo-compose { display: grid; gap: var(--sp-3); }
+.todo-form {
+  padding: var(--sp-4); background: var(--surface);
+  border: var(--stroke) solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+}
+.todo-group-row { display: flex; align-items: center; gap: var(--sp-2); }
+.todo-group-row > i { color: var(--accent-ink); }
+.todo-group-label { font-size: var(--fs-sm); font-weight: var(--fw-bold); color: var(--muted); }
+.todo-group-row .todo-group-input { flex: 1; min-width: 0; min-height: var(--tap); }
+.todo-compose-box {
+  display: grid; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  background: var(--surface-2); border: var(--stroke) solid var(--border); border-radius: var(--radius);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.todo-compose-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.todo-compose-box.is-drop { border-style: dashed; border-color: var(--accent); }
+.todo-compose-box .todo-note-input {
+  width: 100%; min-height: 3.2em; max-height: 14rem; padding: var(--sp-2) 0; resize: vertical;
+  font: inherit; font-size: var(--fs-base); line-height: var(--lh); color: var(--text);
+  background: transparent; border: 0; box-shadow: none; outline: none;
+}
+.todo-compose-bar { display: flex; align-items: center; gap: var(--sp-2); }
+.todo-compose-bar .todo-add { margin-left: auto; }
+.todo-attach { width: var(--tap); padding: 0; }
+.todo-hint { font-size: var(--fs-xs); color: var(--muted); }
+
+/* Toolbar: "Your notes" and the Open / Done / All switch. */
+.todo-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.todo-toolbar-title { margin: 0; font-size: var(--fs-lg); font-weight: var(--fw-black); }
+.todo-tabs {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: var(--surface-2); border: var(--stroke) solid var(--border); border-radius: var(--radius-pill);
+}
+.todo-tab {
+  min-height: var(--tap); padding: 0 var(--sp-4); white-space: nowrap;
+  font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-bold); color: var(--muted);
+  background: transparent; border: 0; border-radius: var(--radius-pill); cursor: pointer;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.todo-tab-count { font-weight: var(--fw-semibold); opacity: .8; }
+.todo-tab.is-active { color: var(--on-primary); background: var(--primary); box-shadow: var(--shadow-press-sm); }
+.todo-tab:focus-visible { outline: none; box-shadow: var(--ring); }
+@media (hover: hover) { .todo-tab:not(.is-active):hover { color: var(--text); background: var(--surface); } }
+
+/* Folder cards: header (fold, name, count, + Add), then the notes with dividers. */
+.todo-groups { display: grid; gap: var(--sp-3); }
+.todo-group {
+  overflow: hidden; background: var(--surface);
+  border: var(--stroke) solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+}
+.todo-group-head { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-1); background: var(--surface-2); }
+.todo-group:not(.is-folded) .todo-group-head { border-bottom: var(--stroke) solid var(--border); }
+.todo-group-title { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-md); }
+.todo-group-toggle {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: var(--tap); padding: 0 var(--sp-2);
+  font: inherit; font-weight: var(--fw-black); color: var(--text); text-align: left;
+  background: transparent; border: 0; border-radius: var(--radius); cursor: pointer;
+}
+.todo-group-toggle > .fa-chevron-down { width: 1em; font-size: 12px; color: var(--muted); transition: transform var(--dur) var(--ease); }
+.todo-group-toggle[aria-expanded="false"] > .fa-chevron-down { transform: rotate(-90deg); }
+.todo-group-toggle > .fa-folder, .todo-group-toggle > .fa-folder-open { color: var(--accent-ink); }
+.todo-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-group-count {
+  min-width: 1.6em; padding: 0 var(--sp-2); font-size: var(--fs-xs); line-height: 1.7; text-align: center;
+  color: var(--accent-ink); background: var(--accent-soft); border-radius: var(--radius-pill);
+}
+.todo-group-toggle:focus-visible { outline: none; box-shadow: var(--ring); }
+.todo-group-add { flex: none; min-height: var(--tap); padding: 0 var(--sp-3); font-size: var(--fs-sm); }
+.todo-group-add i { color: var(--accent-ink); }
+
+.todo-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.todo-list > li + li { border-top: 1px solid var(--border); }
+.todo-item {
+  display: grid; grid-template-columns: var(--tap) minmax(0, 1fr) auto; align-items: start; gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-1);
+  transition: background-color var(--dur) var(--ease);
+}
+@media (hover: hover) { .todo-item:not(.is-editing):hover { background: var(--surface-2); } }
+.todo-item.is-editing { grid-template-columns: minmax(0, 1fr); padding: var(--sp-3); background: var(--surface-2); }
+
+/* The round tick, centred in a 44px tap area. */
+.todo-check {
+  appearance: none; position: relative; justify-self: center; width: 24px; height: 24px; margin: 10px 0;
+  background: var(--surface); border: var(--stroke) solid var(--muted); border-radius: 50%; cursor: pointer;
+  transition: background-color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.todo-check::after {
+  content: ""; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px;
+  border: solid var(--on-primary); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) scale(0);
+  transition: transform var(--dur) var(--ease);
+}
+.todo-check:checked { background: var(--primary); border-color: var(--primary); }
+.todo-check:checked::after { transform: rotate(45deg) scale(1); }
+.todo-check:focus-visible { outline: none; box-shadow: var(--ring); }
+@media (hover: hover) { .todo-check:not(:checked):hover { border-color: var(--primary); } }
+
+.todo-body { display: grid; gap: 4px; min-width: 0; padding-top: 11px; }
+.todo-title { font-size: var(--fs-md); overflow-wrap: anywhere; }
+.todo-note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: var(--lh); color: var(--muted); }
+.todo-note.is-main { font-size: var(--fs-base); color: var(--text); }
+.todo-meta { color: var(--muted); font-size: var(--fs-xs); }
+.todo-actions { display: flex; gap: 2px; }
+.todo-actions .icon { width: var(--tap); padding: 0; color: var(--muted); background: transparent; border-color: transparent; }
+@media (hover: hover) {
+  .todo-actions .icon:hover { color: var(--text); background: var(--surface); border-color: var(--border); }
+  .todo-actions .todo-delete:hover { color: var(--danger); }
+}
+.todo-item.is-done :is(.todo-title, .todo-note) { text-decoration: line-through; color: var(--muted); }
+.todo-item.is-done .todo-files { opacity: .7; }
+
+/* A folder's quick box, at the top of its list. */
+.todo-quick-item { padding: var(--sp-3); background: var(--accent-soft); }
+.todo-quick .todo-compose-box { background: var(--surface); }
+
+/* Editing in place. */
+.todo-edit-form { display: grid; gap: var(--sp-2); }
+.todo-edit-form > .todo-title-input, .todo-edit-form > .todo-note-input { width: 100%; min-height: var(--tap); }
+.todo-edit-form > .todo-note-input { resize: vertical; max-height: 14rem; }
+.todo-edit-actions { display: flex; align-items: center; gap: var(--sp-2); }
+.todo-edit-actions .todo-cancel { margin-left: auto; }
+
+/* Files: chips waiting in a composer, and the files on a note. */
+.todo-chips, .todo-files { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.todo-chip {
+  display: inline-flex; align-items: center; gap: var(--sp-2); max-width: 100%; padding-left: var(--sp-3);
+  font-size: var(--fs-sm); background: var(--surface); border: var(--stroke) solid var(--border); border-radius: var(--radius-pill);
+}
+.todo-chip > i, .todo-file-link > i { color: var(--accent-ink); }
+.todo-chip-name, .todo-file-name { min-width: 0; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.todo-chip-size { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
+.todo-chip-remove { min-height: var(--tap); width: var(--tap); padding: 0; border: 0; background: transparent; }
+.todo-files { margin-top: 2px; }
+.todo-file-link {
+  display: inline-flex; align-items: center; gap: var(--sp-2); min-height: var(--tap); max-width: 100%;
+  padding: 0 var(--sp-3); font-size: var(--fs-sm); color: var(--text); text-decoration: none;
+  background: var(--surface-2); border: var(--stroke) solid var(--border); border-radius: var(--radius);
+}
+.todo-file-link.is-image { padding: 0; overflow: hidden; }
+.todo-thumb { display: block; width: 88px; height: 88px; object-fit: cover; background: var(--surface-3); }
+.todo-file-link:focus-visible { outline: none; box-shadow: var(--ring); }
+@media (hover: hover) { .todo-file-link:hover { border-color: var(--accent); } }
+.todo-file.is-missing .todo-file-link { opacity: .6; cursor: not-allowed; }
+
+/* Nothing in this tab. */
+.todo-empty {
+  display: grid; justify-items: center; gap: var(--sp-1); margin: 0; padding: var(--sp-8) var(--sp-4);
+  text-align: center; color: var(--muted);
+  background: var(--surface); border: var(--stroke) dashed var(--border); border-radius: var(--radius-lg);
+}
+.todo-empty > i { margin-bottom: var(--sp-2); font-size: 28px; color: var(--accent-ink); }
+.todo-empty-title { font-size: var(--fs-lg); color: var(--text); }
+.todo-empty-text { max-width: 36ch; font-size: var(--fs-sm); }

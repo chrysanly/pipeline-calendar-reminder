@@ -71,7 +71,8 @@ export function showView(view) {
     const target = button.dataset.view;
     const active = target === view || (target === 'calendar' && CALENDAR_VIEWS.includes(view));
     button.classList.toggle('is-active', active);
-    if (button.closest('.views')) {
+    // Page buttons: the main nav and History in the account menu.
+    if (button.closest('.views, .account-menu')) {
       if (active) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
     } else {

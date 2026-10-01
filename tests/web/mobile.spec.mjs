@@ -134,11 +134,12 @@ test('the brand logo fits the top bar without sideways scrolling', async ({ page
   expect(Math.round(r.width)).toBe(isPhone() ? 28 : 34);
   expect(r.left).toBeGreaterThanOrEqual(0);
   expect(r.right).toBeLessThanOrEqual(r.vw);
-  // Logo and name stay on one line, clear of the icon buttons.
+  // Logo and name stay on one line, clear of the profile menu button.
   const brand = await rectOf(page.locator('.brand'));
-  const firstButton = await rectOf(page.locator('#theme-toggle'));
+  const firstButton = await rectOf(page.locator('#account-btn'));
   expect(brand.right).toBeLessThanOrEqual(firstButton.left);
-  expect(brand.height).toBeLessThan(40);
+  // The logo is a 44px tap target (it opens Home); two lines would be taller.
+  expect(brand.height).toBeLessThanOrEqual(44);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(r.vw);
 });
 

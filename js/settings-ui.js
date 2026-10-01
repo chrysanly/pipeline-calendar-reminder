@@ -27,7 +27,8 @@ export function openSettings(section = '') {
 
 export function closeSettings() {
   $('#settings').hidden = true;
-  $('#settings-btn').focus();
+  // Settings sits in the closed account menu: back to the button that opens it.
+  $('#account-btn').focus();
 }
 
 /** handlers.onClearAll() resolves to {reminders, meetings} deleted. */

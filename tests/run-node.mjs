@@ -28,6 +28,8 @@ import './timetrack.test.js';
 import './pickers.test.js';
 import './drag.test.js';
 import { chatTestsDone } from './chat.test.js';
+import './chat-quota.test.js';
+import './todos.test.js';
 import { aiTestsDone } from './ai.test.js';
 import { workerTestsDone } from './worker.test.js';
 import './deploy.test.js';

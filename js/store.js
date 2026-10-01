@@ -9,7 +9,7 @@ import { recordKey } from './records.js';
 
 /** Every feature collection besides reminders, minutes and History. */
 export const COLLECTIONS = [
-  'clients', 'tasks', 'time', 'expenses', 'invoices', 'proposals', 'templates', 'settings'
+  'clients', 'tasks', 'time', 'expenses', 'invoices', 'proposals', 'templates', 'settings', 'todos'
 ];
 
 /** Random id; crypto when the browser has it. */

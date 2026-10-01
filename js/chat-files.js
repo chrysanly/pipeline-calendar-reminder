@@ -14,7 +14,7 @@ const filesRef = (db, room = CHAT_ROOM) => db.collection('chat').doc(room).colle
 const loadedFiles = new Map();
 
 /** A big photo, shrunk to 1600 px on its longest side (GIFs and small ones stay as they are). */
-async function shrinkImage(file) {
+export async function shrinkImage(file) {
   if (attachmentKind(file.type) !== 'image' || file.type === 'image/gif' || typeof createImageBitmap !== 'function') return file;
   let bitmap;
   try {
@@ -35,7 +35,7 @@ async function shrinkImage(file) {
   return new File([blob], name, { type: blob.type });
 }
 
-const toBase64 = blob => new Promise((resolve, reject) => {
+export const toBase64 = blob => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
   reader.onerror = () => reject(reader.error || new Error('Could not read the file.'));

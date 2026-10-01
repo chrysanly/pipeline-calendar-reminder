@@ -57,7 +57,16 @@ export async function goToView(page, view, action = 'click') {
   if (['day', 'week', 'month'].includes(view) && !(await button.isVisible())) {
     await page.locator('#view-calendar')[action]();
   }
+  if (view === 'history') await openAccountMenu(page);
   await button[action]();
+}
+
+/** Open the profile dropdown (History, theme, Settings, Sign out) if it is closed. */
+export async function openAccountMenu(page) {
+  const menu = page.locator('#account-menu');
+  if (await menu.isVisible()) return;
+  await page.locator('#account-btn').click();
+  await expect(menu).toBeVisible();
 }
 
 /**

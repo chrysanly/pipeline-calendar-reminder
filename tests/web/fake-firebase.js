@@ -45,6 +45,8 @@
       async set(data) {
         // window.__fakeHold.denyWrites: the rules refuse (not on the chat list).
         if ((window.__fakeHold || {}).denyWrites) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+        // window.__fakeHold.quota: the free daily limit is used up.
+        if ((window.__fakeHold || {}).quota) throw Object.assign(new Error('Quota exceeded.'), { code: 'resource-exhausted' });
         apply([['set', path, data]], 'app');
       },
       async delete() { apply([['delete', path]], 'app'); },

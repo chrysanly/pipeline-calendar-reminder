@@ -3,7 +3,7 @@
 // Also Minutes through a mocked CladFlo Worker (/ai/chat) when there is no key.
 
 import { test, expect } from './fixtures.mjs';
-import { openApp, goToView } from './helpers.mjs';
+import { openApp, goToView, openAccountMenu } from './helpers.mjs';
 
 const KEY = 'gsk_test_0123456789abcd';
 const MINUTES = {
@@ -228,6 +228,7 @@ test('no key but a Worker URL: the minutes come from the Worker, with the access
   expect(worker[0].body.json).toBe(true);
   await expect(page.locator('#minutes-open-settings')).toBeHidden();
 
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#groq-key-state')).toContainText('Using CladFlo Worker, no key needed');
 });
@@ -239,6 +240,7 @@ test('an own key still wins over the Worker', async ({ page }) => {
   await generate(page, 'Anna: hello');
   expect(groq).toHaveLength(1);
   expect(worker).toHaveLength(0);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#groq-key-state')).toContainText('Saved in this browser');
 });

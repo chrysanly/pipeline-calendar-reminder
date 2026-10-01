@@ -6,7 +6,7 @@
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openApp } from './helpers.mjs';
+import { openApp, openAccountMenu } from './helpers.mjs';
 import XLSX from 'xlsx';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -145,6 +145,7 @@ test('one file with repeated rows: every row is imported, repeats counted as dup
   expect(stored).toHaveLength(5);
 
   // Re-import from History updates the same 5 rows: nothing lost, nothing added.
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   await page.locator('#history-list .history-item', { hasText: 'repeats.xlsx' }).locator('.history-reimport').click();
   await expect(page.locator('#banner:not(.is-busy) #banner-title')).toHaveText(/^Imported 5 reminders: 0 new, 5 updated/);
@@ -447,6 +448,7 @@ test('History: the client filter menu has a search box (many clients); picking f
     await page.locator('#page-client .calendar-add').click();
     await dismissToast(page);
   }
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   await page.locator('#history-client').click();
   const menu = page.locator('.menu-pop');

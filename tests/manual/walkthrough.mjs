@@ -120,7 +120,9 @@ await page.locator('#add-event').click();
 check('New reminder opens the modal', await page.locator('#modal').isVisible());
 await page.locator('#modal-cancel').click();
 check('Cancel closes the modal', await page.locator('#modal').isHidden());
-await page.locator('#theme-toggle, [aria-label*="theme" i]').first().click();
+// The theme toggle lives in the profile menu.
+await page.locator('#account-btn').click();
+await page.locator('#theme-toggle').click();
 await page.locator('#view-dashboard').click();
 await page.screenshot({ path: `${out}/home-dark.png`, fullPage: true });
 

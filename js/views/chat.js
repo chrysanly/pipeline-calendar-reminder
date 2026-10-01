@@ -8,9 +8,11 @@
 
 import {
   CHAT_MAX, CHAT_PAGE, chatPath, validateChatText, validateAttachment, chatRecord, normalizeChatMessage, orderChat,
-  isOwnMessage, unreadCount, latestAt, chatErrorText, withChatTimeout, formatFileSize,
+  isOwnMessage, unreadCount, latestAt, chatErrorText, isQuotaError, quotaText, snapshotReads, withChatTimeout, formatFileSize,
   presenceList, typingText, replyRecord, replySnippet
 } from '../chat.js';
+import { loadUsage, isExhausted, markExhausted, addReads, addWrites } from '../chat-quota.js';
+import { buildQuotaLine, showQuota, watchQuotaLog } from './chat-quota-line.js';
 import { uploadChatFile } from '../chat-files.js';
 import { startPresence } from '../chat-presence.js';
 import { newRecordId } from '../store.js';
@@ -24,6 +26,8 @@ const CHAT_SEEN_KEY = 'cladflo.chat-seen.v1';
 
 // Live state: the messages shown, how many to ask for, the listeners, who is around.
 const chatRoom = { messages: [], limit: CHAT_PAGE, more: false, stop: null, error: '', presence: null, people: [], presenceNote: '' };
+// Firestore said the free daily limit is used up (kept per Pacific day in js/chat-quota.js).
+const quotaLocked = () => isExhausted(loadUsage());
 let chatParts = null;
 // The file picked for the next message.
 let chatPending = null;
@@ -82,13 +86,36 @@ function listenChat(app) {
     return;
   }
   chatRoom.stop = messagesRef(db).orderBy('at', 'desc').limit(chatRoom.limit).onSnapshot(snap => {
+    addReads(snapshotReads(snap));
     chatRoom.error = '';
     chatRoom.more = snap.docs.length >= chatRoom.limit;
     chatRoom.messages = orderChat(snap.docs.map(doc => normalizeChatMessage(doc.id, doc.data())));
     refreshChat(app);
   }, err => {
+    console.error('CladFlo Talk read failed:', err);
+    if (isQuotaError(err)) {
+      onQuota(app);
+      return;
+    }
     chatRoom.error = `Could not load CladFlo Talk. ${chatErrorText(err, navigator.onLine)} Signed in as ${app.user ? app.user.email : 'nobody'}.`;
     refreshChat(app);
+  });
+}
+
+/** Daily limit used up: lock the chat until the reset and stop the presence heartbeat retrying. */
+function onQuota(app) {
+  markExhausted();
+  if (chatRoom.presence) chatRoom.presence.halt();
+  refreshChat(app);
+  renderQuota(app);
+}
+
+/** The quota line and the composer lock; reconnects once the reset has passed. */
+function renderQuota(app) {
+  if (!chatParts) return;
+  showQuota(chatParts, () => {
+    listenChat(app);
+    listenPresence(app);
   });
 }
 
@@ -107,14 +134,18 @@ function listenPresence(app) {
   chatRoom.presence = null;
   presenceDocs = [];
   const db = app.db();
-  if (!db || !app.user) return;
+  if (!db || !app.user || quotaLocked()) return;
   chatRoom.presence = startPresence(db, app.user, {
     onChange(docs) {
       if (docs) presenceDocs = docs;
       chatRoom.presenceNote = '';
       renderPresence(app);
     },
-    onError() {
+    onError(err) {
+      if (isQuotaError(err)) {
+        onQuota(app);
+        return;
+      }
       chatRoom.presenceNote = 'Who is online shows once the latest CladFlo Talk rules are deployed.';
       renderPresence(app);
     }
@@ -186,13 +217,21 @@ function setPending(file) {
   chatParts.fileInput.value = '';
 }
 
+/** A failed send, logged raw for the console and reworded for the status line. */
+function chatFailure(err) {
+  console.error('CladFlo Talk send failed:', err);
+  if (isQuotaError(err)) onQuota(chatParts.app);
+  return new Error(chatErrorText(err, navigator.onLine, quotaLocked()));
+}
+
 /** Firestore writes that fail, in plain words; a write offline gives up after a while. */
 async function chatWrite(action) {
   if (!navigator.onLine) throw new Error(chatErrorText(null, false));
   try {
+    addWrites(1);
     return await withChatTimeout(action());
   } catch (err) {
-    throw new Error(chatErrorText(err, navigator.onLine));
+    throw chatFailure(err);
   }
 }
 
@@ -209,13 +248,21 @@ async function sendChat(app) {
     setChatStatus(blocked || 'CladFlo Talk is not connected yet.');
     return;
   }
+  if (quotaLocked()) {
+    setChatStatus(`Not sent: ${quotaText()}`);
+    return;
+  }
   setChatStatus('');
   try {
     let attachment = null;
     if (file) {
+      // One write for the file record, then one per chunk (onProgress after each).
       attachment = await uploadChatFile(db, app.user, file, {
-        onProgress: (done, total) => setChatStatus(total > 1 ? `Sending ${file.name}… ${Math.round((done / total) * 100)}%` : `Sending ${file.name}…`)
-      }).catch(err => { throw new Error(chatErrorText(err, navigator.onLine)); });
+        onProgress: (done, total) => {
+          addWrites(1);
+          setChatStatus(total > 1 ? `Sending ${file.name}… ${Math.round((done / total) * 100)}%` : `Sending ${file.name}…`);
+        }
+      }).catch(err => { throw chatFailure(err); });
     }
     const replyTo = chatReply ? replyRecord(chatReply) : null;
     await chatWrite(() => messagesRef(db).doc(newRecordId()).set(chatRecord(app.user, text, new Date(), attachment, replyTo)));
@@ -311,7 +358,8 @@ function buildCompose(app) {
   unpick.addEventListener('click', () => setPending(null));
   form.addEventListener('submit', e => {
     e.preventDefault();
-    withBusy(submit, () => sendChat(app));
+    // After the busy state ends: lock again if that send hit the daily limit.
+    withBusy(submit, () => sendChat(app)).then(() => renderQuota(app));
   });
   input.addEventListener('input', () => {
     updateChatCounter();
@@ -336,7 +384,7 @@ function buildCompose(app) {
     e.preventDefault();
     pickFile(e.dataTransfer && e.dataTransfer.files[0]);
   });
-  return { form, input, fileInput, fileChip, fileName, counter, status, submit, replyBar, replyName, replySnippet: replySnippetNode };
+  return { form, input, attach, fileInput, fileChip, fileName, counter, status, submit, replyBar, replyName, replySnippet: replySnippetNode };
 }
 
 function buildChatPage(app, section) {
@@ -360,11 +408,15 @@ function buildChatPage(app, section) {
   const typing = el('p', 'chat-typing');
   typing.setAttribute('aria-live', 'polite');
   const compose = buildCompose(app);
+  const quota = buildQuotaLine();
   // Phones: avatars and a Shared button on top instead of the side panel (css/chat.css).
-  main.append(buildChatMobileBar(), older, log, typing, compose.form);
+  main.append(buildChatMobileBar(), older, log, typing, quota, compose.form);
   card.append(main, buildChatSide(app));
   section.append(head, notice, card);
-  chatParts = { app, section, notice, card, older, log, typing, ...compose };
+  chatParts = { app, section, notice, card, older, log, typing, quota, ...compose };
+  // Keep "resets in …" and the counts current; check the reset when the tab comes back.
+  setInterval(() => renderQuota(app), 60 * 1000);
+  window.addEventListener('focus', () => renderQuota(app));
   // Reply buttons and quoted replies, in every message (bound once).
   log.addEventListener('click', e => {
     const reply = e.target.closest('.chat-reply-btn');
@@ -381,8 +433,10 @@ function buildChatPage(app, section) {
 function renderChat(app) {
   if (!chatParts) return;
   const blocked = chatBlocked(app);
-  chatParts.notice.textContent = blocked || chatRoom.error;
-  chatParts.notice.hidden = !blocked && !chatRoom.error;
+  const error = quotaLocked() ? quotaText() : chatRoom.error;
+  chatParts.notice.textContent = blocked || error;
+  chatParts.notice.hidden = !blocked && !error;
+  renderQuota(app);
   chatParts.card.hidden = Boolean(blocked);
   if (blocked) return;
   const stick = chatParts.log.scrollHeight - chatParts.log.scrollTop - chatParts.log.clientHeight < 40;
@@ -430,6 +484,7 @@ export function registerChat(app) {
       renderDot(current);
     }
   });
+  watchQuotaLog(() => onQuota(app));
   app.hooks.on('auth', () => {
     chatRoom.limit = CHAT_PAGE;
     chatRoom.error = '';

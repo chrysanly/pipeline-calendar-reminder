@@ -1,10 +1,15 @@
 import { test, assert, assertEqual, assertDeepEqual } from './runner.js';
 import {
   CHAT_MAX, validateChatText, chatRecord, normalizeChatMessage, orderChat, isOwnMessage, unreadCount, latestAt, chatTime, chatPath,
-  chatErrorText, withChatTimeout, CHAT_NOT_ALLOWED, CHAT_OFFLINE, CHAT_FILE_MAX, attachmentKind, validateAttachment, splitChunks,
+  chatErrorText, withChatTimeout, CHAT_NOT_ALLOWED, CHAT_OFFLINE, CHAT_QUOTA, quotaText, snapshotReads, isQuotaError, CHAT_FILE_MAX, attachmentKind, validateAttachment, splitChunks,
   attachmentRecord, formatFileSize, shrinkSize, linkParts, sharedItems, presenceList, typingText, lastSeenText,
   chatInitials, avatarTone, replyRecord, replySnippet, normalizeReply, REPLY_SNIPPET_MAX
 } from '../js/chat.js';
+import { startPresence, PRESENCE_BEAT_MS } from '../js/chat-presence.js';
+import { nextResetAt, localTime } from '../js/chat-quota.js';
+
+// 02:40 UTC: 19:40 PDT, so the quota resets in 4 h 20 min.
+const QUOTA_NOW = new Date('2026-09-30T02:40:00Z');
 
 const ME = { uid: 'u1', displayName: 'Chrys', email: 'Chrys@Example.com' };
 const msg = (id, uid, at, text = 'hi') => ({ id, uid, name: uid, email: '', text, at });
@@ -63,8 +68,129 @@ test('chatErrorText: permission denied, offline and expired sign-in in plain wor
   assertEqual(chatErrorText(new Error('Failed to get document because the client is offline.')), CHAT_OFFLINE);
   assertEqual(chatErrorText({ code: 'permission-denied' }, false), CHAT_OFFLINE, 'no connection wins');
   assertEqual(chatErrorText({ code: 'unauthenticated' }), 'Your sign-in has expired: sign out, sign in again, then retry.');
-  assertEqual(chatErrorText(new Error('Quota exceeded.')), 'Quota exceeded.');
+  assertEqual(chatErrorText(new Error('Quota exceeded.'), true, false, QUOTA_NOW), quotaText(QUOTA_NOW));
   assertEqual(chatErrorText(null), 'Something went wrong. Try again.');
+});
+
+test('chatErrorText: free-plan quota and unknown codes show the cause', () => {
+  assertEqual(chatErrorText({ code: 'resource-exhausted', message: 'Quota exceeded.' }, true, false, QUOTA_NOW), quotaText(QUOTA_NOW));
+  assertEqual(chatErrorText({ code: 'firestore/resource-exhausted' }, true, false, QUOTA_NOW), quotaText(QUOTA_NOW), 'prefixed code');
+  assertEqual(chatErrorText({ code: 'resource-exhausted' }, false), CHAT_OFFLINE, 'no connection wins');
+  assertEqual(chatErrorText({ code: 'failed-precondition', message: 'Index missing.' }), 'Index missing. (code: failed-precondition)');
+  assertEqual(chatErrorText({ code: 'internal' }), 'Something went wrong. Try again. (code: internal)');
+});
+
+test('isQuotaError: the resource-exhausted code or "quota" in the message or log line', () => {
+  assert(isQuotaError({ code: 'resource-exhausted' }));
+  assert(isQuotaError({ code: 'firestore/resource-exhausted' }));
+  assert(isQuotaError({ message: 'Firestore (12.19.0): FirebaseError: [code=resource-exhausted]: Quota exceeded.' }), 'log entry');
+  assert(!isQuotaError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' }));
+  assert(!isQuotaError(null));
+  assert(!isQuotaError('Quota exceeded.'), 'only error objects');
+});
+
+test('chatErrorText: once the quota is hit, a timed-out send shows the quota text, not offline', () => {
+  const timeout = { code: 'deadline-exceeded', message: 'No answer from Firestore.' };
+  assertEqual(chatErrorText(timeout), CHAT_OFFLINE);
+  assertEqual(chatErrorText(timeout, true, true, QUOTA_NOW), quotaText(QUOTA_NOW));
+  assertEqual(chatErrorText(timeout, false, true), CHAT_OFFLINE, 'no connection still wins');
+});
+
+test('quotaText says when chat resumes (Pacific midnight, in local time)', () => {
+  const reset = localTime(nextResetAt(QUOTA_NOW));
+  assertEqual(quotaText(QUOTA_NOW), `${CHAT_QUOTA} Chat resumes at ${reset} (in 4 h 20 min), or upgrade the plan.`);
+  assert(!/3–4pm/.test(quotaText(QUOTA_NOW)), 'no fixed UAE time');
+});
+
+test('snapshotReads counts the changed documents, and nothing from the cache', () => {
+  const docs = [{}, {}, {}];
+  assertEqual(snapshotReads({ docs, metadata: { fromCache: false } }), 3, 'no docChanges: every document');
+  assertEqual(snapshotReads({ docs, docChanges: () => [{}], metadata: { fromCache: false } }), 1);
+  assertEqual(snapshotReads({ docs, docChanges: () => [{}, {}], metadata: { fromCache: true } }), 0);
+  assertEqual(snapshotReads(null), 0);
+});
+
+/** A fake Firestore presence collection plus document/window, recording writes. */
+function fakePresence() {
+  const writes = [];
+  const listeners = {};
+  let snapshotError = null;
+  let unsubscribed = 0;
+  let failWith = null;
+  const doc = { set: data => { writes.push(data); return failWith ? Promise.reject(failWith) : Promise.resolve(); } };
+  const collection = {
+    doc: () => doc,
+    onSnapshot: (next, error) => { snapshotError = error; return () => { unsubscribed++; }; }
+  };
+  const db = { collection: () => ({ doc: () => ({ collection: () => collection }) }) };
+  const page = {
+    doc: {
+      visibilityState: 'visible',
+      addEventListener: (name, fn) => { listeners[name] = fn; },
+      removeEventListener: name => { delete listeners[name]; }
+    },
+    win: { addEventListener() {}, removeEventListener() {} }
+  };
+  return {
+    db, writes, listeners, page,
+    fail: err => { failWith = err; },
+    snapshotFail: err => snapshotError(err),
+    get unsubscribed() { return unsubscribed; }
+  };
+}
+
+const presenceUser = { uid: 'u1', email: 'A@x.com', displayName: 'Ann' };
+
+test('presence: the heartbeat is 90 s and a hidden tab does not write', () => {
+  assertEqual(PRESENCE_BEAT_MS, 90 * 1000);
+  const fake = fakePresence();
+  const presence = startPresence(fake.db, presenceUser, { onChange() {}, ...fake.page });
+  assertEqual(fake.writes.length, 1, 'first write on start');
+  fake.page.doc.visibilityState = 'hidden';
+  fake.listeners.visibilitychange();
+  presence.typing(true);
+  assertEqual(fake.writes.length, 1, 'hidden: no writes');
+  fake.page.doc.visibilityState = 'visible';
+  fake.listeners.visibilitychange();
+  assertEqual(fake.writes.length, 2, 'back: writes again');
+  presence.stop();
+});
+
+test('presence: no writes while the daily limit is reached; its writes and reads are counted', () => {
+  const saved = new Map();
+  globalThis.localStorage = { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, String(value)) };
+  try {
+    const fake = fakePresence();
+    const presence = startPresence(fake.db, presenceUser, { onChange() {}, ...fake.page });
+    presence.typing(true);
+    assertEqual(fake.writes.length, 2);
+    assertEqual(JSON.parse(saved.get('cladflo.chat-quota.v1')).writes, 2, 'counted');
+    presence.halt();
+    const usage = JSON.parse(saved.get('cladflo.chat-quota.v1'));
+    saved.set('cladflo.chat-quota.v1', JSON.stringify({ ...usage, exhausted: true }));
+    const locked = fakePresence();
+    const paused = startPresence(locked.db, presenceUser, { onChange() {}, ...locked.page });
+    paused.typing(true);
+    paused.stop();
+    assertEqual(locked.writes.length, 0, 'paused at the limit, even on leave');
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('presence: a quota error halts the heartbeat and the listener, with no more writes', () => {
+  const fake = fakePresence();
+  const errors = [];
+  const presence = startPresence(fake.db, presenceUser, { onChange() {}, onError: err => errors.push(err), ...fake.page });
+  fake.snapshotFail({ code: 'resource-exhausted', message: 'Quota exceeded.' });
+  assertEqual(fake.unsubscribed, 1, 'listener stopped');
+  assertEqual(errors.length, 1);
+  const before = fake.writes.length;
+  presence.typing(true);
+  presence.stop();
+  assertEqual(fake.writes.length, before, 'no writes after halt, not even on leave');
+  assertEqual(fake.unsubscribed, 1, 'stopped once');
+  assert(!fake.listeners.visibilitychange, 'visibility listener removed');
   assert(CHAT_NOT_ALLOWED.includes('CladFlo Talk list') && CHAT_NOT_ALLOWED.includes('rules'));
 });
 
@@ -182,6 +308,20 @@ test('replies: replyRecord keeps the id, the name and up to 120 characters; norm
   assertEqual(normalizeReply({ name: 'x' }), null, 'a reply needs the id it answers');
   assertEqual(normalizeReply({ id: 'm1', snippet: 'y'.repeat(300) }).snippet.length, REPLY_SNIPPET_MAX);
   assertEqual(normalizeReply({ id: 'm1' }).name, 'Someone');
+});
+
+laterChat('presence: a quota error on a write halts it too; other errors do not', async () => {
+  const fake = fakePresence();
+  const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+  fake.fail({ code: 'permission-denied' });
+  const presence = startPresence(fake.db, presenceUser, { onChange() {}, ...fake.page });
+  await tick();
+  assertEqual(fake.unsubscribed, 0, 'rules error keeps going');
+  fake.fail({ code: 'resource-exhausted' });
+  presence.typing(true);
+  await tick();
+  assertEqual(fake.unsubscribed, 1, 'quota error halts');
+  presence.stop();
 });
 
 export const chatTestsDone = Promise.all(pendingChat);

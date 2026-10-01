@@ -179,3 +179,23 @@
 @media (prefers-reduced-motion: reduce) {
   .panel, .panel-backdrop, .modal-card, .banner { animation: none; }
 }
+
+/* ---------- To-Do on phones (css/features.css) ----------
+   features.css loads after this file, so these rules carry the .todo-card
+   prefix to win over its desktop ones. */
+
+@media (max-width: 640px) {
+  .todo-card { margin-top: var(--sp-4); gap: var(--sp-3); }
+  .todo-card .todo-form { padding: var(--sp-3); }
+  .todo-card .todo-hint { display: none; }
+  .todo-card .todo-toolbar { display: grid; justify-content: stretch; gap: var(--sp-2); }
+  .todo-card .todo-tabs { display: flex; }
+  .todo-card .todo-tab { flex: 1; padding: 0 var(--sp-2); }
+  .todo-card .todo-group-add .btn-label { display: none; }
+  .todo-card .todo-group-add { width: var(--tap); padding: 0; }
+  .todo-card .todo-item { padding-right: 0; }
+  .todo-card .todo-thumb { width: 72px; height: 72px; }
+  .todo-card :is(.todo-chip-name, .todo-file-name) { max-width: 14ch; }
+  .todo-card :is(.todo-quick-item, .todo-item.is-editing) { padding: var(--sp-2); }
+  .todo-card .todo-edit-actions > :is(.todo-save, .todo-cancel) { flex: 1; }
+}

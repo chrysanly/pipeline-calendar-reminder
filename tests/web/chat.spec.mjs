@@ -6,6 +6,7 @@ import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openApp } from './helpers.mjs';
+import { quotaDayKey, nextResetAt, localTime } from '../../js/chat-quota.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOM = 'chat/main/messages';
@@ -275,4 +276,74 @@ test('a quote of an older message loads older pages until it shows; a missing on
 
   await bubbles(page).filter({ hasText: 'About a lost one' }).locator('.chat-quote').click();
   await expect(page.locator('#banner-title')).toHaveText('That message is no longer available');
+});
+
+// ---------- daily quota (js/chat-quota.js) ----------
+
+const quotaLine = page => page.locator('#page-chat .chat-quota');
+const composer = page => ({
+  input: page.locator('#page-chat .chat-input'),
+  send: page.locator('#page-chat .chat-send'),
+  attach: page.locator('#page-chat .chat-attach')
+});
+
+test('quota: the estimate and the reset time show on load, counting the reads', async ({ page }) => {
+  await openCloud(page, { [`${ROOM}/m1`]: message('anna', 'Anna', 'Morning team', 30) });
+  await signIn(page);
+  await chatButton(page).click();
+  await expect(bubbles(page)).toHaveCount(1);
+  const reset = localTime(nextResetAt(NOW));
+  await expect(quotaLine(page)).toContainText('Daily quota (estimate):');
+  await expect(quotaLine(page)).toContainText('/ 20,000 writes');
+  await expect(quotaLine(page)).toContainText('/ 50,000 reads');
+  await expect(quotaLine(page)).toContainText(`resets at ${reset}`);
+  await expect(quotaLine(page)).not.toHaveClass(/is-locked/);
+  const { input, send, attach } = composer(page);
+  await expect(input).toBeEnabled();
+  await expect(send).toBeEnabled();
+  await expect(attach).toBeEnabled();
+  const usage = await page.evaluate(() => JSON.parse(localStorage.getItem('cladflo.chat-quota.v1')));
+  expect(usage.reads).toBeGreaterThanOrEqual(1);
+  expect(usage.writes).toBeGreaterThanOrEqual(1); // the presence heartbeat
+});
+
+test('quota: a resource-exhausted send locks the text box, Send and Attach, and says when chat resumes', async ({ page }) => {
+  await openCloud(page);
+  await signIn(page);
+  await chatButton(page).click();
+  const { input, send, attach } = composer(page);
+  await expect(input).toBeEnabled();
+  await input.fill('Anyone there?');
+  // The limit runs out right as Send is pressed (typing itself would lock it first).
+  await page.evaluate(() => {
+    window.__fakeHold = { quota: true };
+    document.querySelector('#page-chat .chat-form').requestSubmit();
+  });
+  const reset = localTime(nextResetAt(NOW));
+  await expect(page.locator('#page-chat .chat-status')).toContainText('Firebase’s free daily limit is used up.');
+  await expect(page.locator('#page-chat .chat-status')).not.toContainText('Can’t reach Firestore');
+  await expect(quotaLine(page)).toHaveClass(/is-locked/);
+  await expect(quotaLine(page)).toContainText(`Daily limit reached. Chat resumes at ${reset}`);
+  await expect(input).toBeDisabled();
+  await expect(send).toBeDisabled();
+  await expect(attach).toBeDisabled();
+  await expect(bubbles(page)).toHaveCount(0);
+});
+
+test('quota: still locked after a reload the same day, and open again after the reset', async ({ page }) => {
+  await openCloud(page);
+  await page.evaluate(day => localStorage.setItem('cladflo.chat-quota.v1', JSON.stringify({ day, reads: 50000, writes: 20000, exhausted: true })), quotaDayKey(NOW));
+  await page.reload();
+  await signIn(page);
+  await chatButton(page).click();
+  const { input, send } = composer(page);
+  await expect(quotaLine(page)).toContainText('Daily limit reached. Chat resumes at');
+  await expect(page.locator('#page-chat .chat-notice')).toContainText('Firebase’s free daily limit is used up.');
+  await expect(input).toBeDisabled();
+  await expect(send).toBeDisabled();
+
+  await page.clock.fastForward(nextResetAt(NOW).getTime() - NOW.getTime() + 2000);
+  await expect(input).toBeEnabled();
+  await expect(send).toBeEnabled();
+  await expect(quotaLine(page)).toContainText('Daily quota (estimate):');
 });

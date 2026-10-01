@@ -38,7 +38,24 @@
   letter-spacing: -.02em;
   white-space: nowrap;
 }
-/* Same artwork as the favicon. */
+/* The logo and name are one button that opens Home: no button chrome. */
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+  min-height: var(--tap);
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.brand-link:focus-visible { outline: none; box-shadow: var(--ring); }
+/* Same artwork as the favicon; its red tile follows the One Piece skin. */
+html[data-skin="onepiece"] .brand-logo rect { fill: var(--primary); }
 .brand-logo { width: 34px; height: 34px; flex: none; display: block; }
 
 /* Main nav: four pages, icon + label. */
@@ -160,7 +177,33 @@
 .account-text { display: grid; min-width: 0; }
 .account-name, .account-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-email { font-size: var(--fs-sm); color: var(--muted); }
+.account-menu [hidden] { display: none; }
 .account-signout { width: 100%; }
+/* Icons centred on the label's capitals: the boxes line up, but the glyphs sit
+   high next to text (its box keeps room for descenders), so nudge them down. */
+:is(.account-signout, .account-item) i { line-height: 1; display: inline-grid; place-items: center; height: 1.2em; translate: 0 .08em; }
+
+/* History, theme and Settings: full-width rows, the open page marked. */
+.account-item {
+  justify-content: flex-start;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 var(--sp-3);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  text-align: left;
+}
+.account-item i { width: 1.25em; color: var(--muted); text-align: center; }
+.account-item.is-active { color: var(--accent-ink); background: var(--accent-soft); border-color: var(--accent); }
+.account-item.is-active i { color: inherit; }
+.account-item:focus-visible { outline: none; box-shadow: var(--ring); }
+.account-info:not([hidden]) + .account-item { margin-top: var(--sp-1); }
+@media (hover: hover) {
+  .account-item:hover { background: var(--surface-2); }
+}
+/* Not signed in: the button is just a menu, no name. */
+.account.is-guest .avatar { font-size: var(--fs-sm); background: var(--surface-3); color: var(--text); }
 
 @keyframes menu-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
 
@@ -266,6 +309,7 @@ body[data-auth="loading"] :is(#add-event, #import-btn, #clear-calendar-btn) { di
   }
   .brand { min-width: 0; gap: var(--sp-2); overflow: hidden; font-size: var(--fs-lg); }
   .brand-logo { width: 28px; height: 28px; }
+  .brand-link { min-width: 0; }
   .topbar-actions { gap: 6px; }
   #sign-in .btn-label { display: none; }
   #sign-in { width: var(--tap); padding: 0; }

@@ -4,7 +4,7 @@
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openApp, fillForm, waitForImport } from './helpers.mjs';
+import { openApp, fillForm, waitForImport, openAccountMenu } from './helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const NOW = new Date(2026, 8, 27, 10, 0, 0);
@@ -27,6 +27,7 @@ async function createEvent(page, fields) {
 const entries = page => page.locator('#history-list .history-item');
 
 test('the History button and the L key open the History view', async ({ page }) => {
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   await expect(page.locator('#history')).toBeVisible();
   await expect(page.locator('.calendar')).toBeHidden();

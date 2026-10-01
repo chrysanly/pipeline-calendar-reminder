@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#e60039">
   <!-- The saved theme before the first paint, so the splash is not the wrong colour (theme.js takes over). -->
-  <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <script>try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t; if (localStorage.getItem('skin') === 'onepiece') document.documentElement.dataset.skin = 'onepiece'; } catch (e) {}</script>
   <title>CladFlo — Client Reminders &amp; BD Calendar</title>
   <meta name="description" content="Track client leads, potential, active and inactive accounts, get real-time reminders, and import BD notes from Excel — all in one calendar.">
   <meta name="robots" content="index,follow">
@@ -73,26 +73,23 @@
   </div>
 
   <header class="topbar">
-    <h1 class="brand"><svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/><path class="logo-rays" d="M44 6.5V9.5M44 28.5V31.5M31.5 19H34.5M53.5 19H56.5M35.2 10.2L37.3 12.3M50.7 25.7L52.8 27.8M35.2 27.8L37.3 25.7M50.7 12.3L52.8 10.2" fill="none" stroke="#ffd400" stroke-width="3" stroke-linecap="round"/><path d="M40.5 27.5A15 15 0 1 0 40.5 48.5" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/><circle class="logo-sun" cx="44" cy="19" r="6.5" fill="#ffd400"/></svg>CladFlo</h1>
+    <h1 class="brand"><button id="brand-link" type="button" class="brand-link" aria-label="CladFlo, go to Home" title="Home"><svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><rect x="2" y="2" width="60" height="60" rx="18" fill="#e60039"/><path class="logo-rays" d="M44 6.5V9.5M44 28.5V31.5M31.5 19H34.5M53.5 19H56.5M35.2 10.2L37.3 12.3M50.7 25.7L52.8 27.8M35.2 27.8L37.3 25.7M50.7 12.3L52.8 10.2" fill="none" stroke="#ffd400" stroke-width="3" stroke-linecap="round"/><path d="M40.5 27.5A15 15 0 1 0 40.5 48.5" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round"/><circle class="logo-sun" cx="44" cy="19" r="6.5" fill="#ffd400"/></svg>CladFlo</button></h1>
     <nav class="views" aria-label="Main">
       <button id="view-dashboard" type="button" data-view="dashboard" title="Home (H)"><i class="fa-solid fa-house" aria-hidden="true"></i> <span class="btn-label">Home</span></button>
       <button id="view-calendar" type="button" data-view="calendar" title="Calendar (C)"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> <span class="btn-label">Calendar</span></button>
-      <button id="view-history" type="button" data-view="history" title="History (L)"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> <span class="btn-label">History</span></button>
     </nav>
     <div class="topbar-actions">
       <span id="sync-status" class="sync-status" role="status" aria-live="polite" hidden></span>
       <button id="sync-retry" type="button" class="ghost sync-retry" hidden><i class="fa-solid fa-rotate-right" aria-hidden="true"></i> Retry</button>
-      <button id="theme-toggle" type="button" class="icon" aria-label="Toggle theme"><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
-      <button id="settings-btn" type="button" class="icon" aria-label="Settings" title="Settings"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>
-      <div id="auth-area" class="auth-area" hidden>
+      <div id="auth-area" class="auth-area">
         <button id="sign-in" type="button" class="primary" aria-label="Sign in with Google" hidden><i class="fa-brands fa-google" aria-hidden="true"></i> <span class="btn-label">Sign in</span></button>
-        <div id="account" class="account" hidden>
+        <div id="account" class="account">
           <button id="account-btn" type="button" class="account-btn" aria-haspopup="true" aria-expanded="false" aria-controls="account-menu">
             <span id="account-initial" class="avatar" aria-hidden="true"></span>
             <span id="user-name" class="user-name"></span>
             <i class="fa-solid fa-chevron-down account-caret" aria-hidden="true"></i>
           </button>
-          <div id="account-menu" class="account-menu" hidden>
+          <div id="account-menu" class="account-menu" role="menu" aria-label="Account and settings" hidden>
             <div class="account-info">
               <span id="account-menu-initial" class="avatar avatar-lg" aria-hidden="true"></span>
               <span class="account-text">
@@ -100,7 +97,11 @@
                 <span id="account-email" class="account-email"></span>
               </span>
             </div>
-            <button id="sign-out" type="button" class="ghost account-signout"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out</button>
+            <button id="view-history" type="button" class="ghost account-item" role="menuitem" data-view="history" title="History (L)"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> <span class="btn-label">History</span></button>
+            <button id="theme-toggle" type="button" class="ghost account-item" role="menuitem" aria-label="Toggle theme"><i class="fa-solid fa-moon" aria-hidden="true"></i> <span class="btn-label">Dark mode</span></button>
+            <button id="skin-toggle" type="button" class="ghost account-item" role="menuitem" aria-label="Switch to the One Piece theme"><i class="fa-solid fa-anchor" aria-hidden="true"></i> <span class="btn-label">One Piece theme</span></button>
+            <button id="settings-btn" type="button" class="ghost account-item" role="menuitem" title="Settings"><i class="fa-solid fa-gear" aria-hidden="true"></i> <span class="btn-label">Settings</span></button>
+            <button id="sign-out" type="button" class="ghost account-signout" role="menuitem"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Sign out</button>
           </div>
         </div>
       </div>

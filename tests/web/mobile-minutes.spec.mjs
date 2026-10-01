@@ -4,7 +4,7 @@
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openApp } from './helpers.mjs';
+import { openApp, openAccountMenu } from './helpers.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shotName = name => join(here, '..', '..', 'test-results', 'mobile', `${test.info().project.name}-${name}.png`);
@@ -54,14 +54,16 @@ async function open(page) {
   await openApp(page);
 }
 
-test('every view and the gear fit the top bar (Minutes has no button)', async ({ page }) => {
+test('every view fits the top bar; History and Settings fit in the profile menu (Minutes has no button)', async ({ page }) => {
   await open(page);
   await expect(page.locator('#view-minutes')).toHaveCount(0);
-  for (const view of ['dashboard', 'day', 'week', 'month', 'history']) {
+  for (const view of ['dashboard', 'day', 'week', 'month']) {
     await expect(page.locator(`#view-${view}`)).toBeVisible();
   }
-  await expect(page.locator('#settings-btn')).toBeVisible();
   await expectFits(page, '.views');
+  await openAccountMenu(page);
+  for (const id of ['#view-history', '#theme-toggle', '#settings-btn']) await expect(page.locator(id)).toBeVisible();
+  await expectFits(page, '#account-menu');
 });
 
 test('Minutes: the form, the generated minutes and the saved list fit the screen', async ({ page }) => {
@@ -89,6 +91,7 @@ test('Minutes: the form, the generated minutes and the saved list fit the screen
 
 test('History fits the screen with its filters', async ({ page }) => {
   await open(page);
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   await expect(page.locator('#history')).toBeVisible();
   await expectFits(page, '#history');
@@ -96,6 +99,7 @@ test('History fits the screen with its filters', async ({ page }) => {
 
 test('Settings fits the screen with 44px buttons', async ({ page }) => {
   await open(page);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#settings')).toBeVisible();
   // Measure the dialog once its pop-in (which starts at 98% scale) has finished.

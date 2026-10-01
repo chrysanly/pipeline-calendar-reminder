@@ -18,7 +18,7 @@ import { createStore, listBackend, readSettings } from './store.js';
 import { createHooks } from './hooks.js';
 import { createViewRegistry } from './views/registry.js';
 import { FEATURES } from './features.js';
-import { initTheme, toggleTheme } from './theme.js';
+import { initTheme, toggleTheme, toggleSkin } from './theme.js';
 import {
   renderCalendar, renderPanel, isPanelOpen, swipeDirection, COMPACT_QUERY,
   openModal, closeModal, isModalOpen, readForm, bindForm, withBusy, showView, mountView
@@ -28,7 +28,7 @@ import { showBanner, bindBanner, reportError, runWithToast } from './banner.js';
 import { installSelectMenus } from './select-menu.js';
 import { createDatePicker } from './datepicker.js';
 import {
-  renderAuth, bindAccountMenu, isAccountMenuOpen, closeAccountMenu, renderSaveStatus, bindSaveRetry
+  renderAuth, bindAccountMenu, bindBrandLink, isAccountMenuOpen, closeAccountMenu, renderSaveStatus, bindSaveRetry
 } from './topbar-ui.js';
 import { createSaveTracker } from './save-status.js';
 import { renderDashboard } from './dashboard-ui.js';
@@ -396,7 +396,9 @@ function bind() {
   }
   document.querySelector('#view-calendar').addEventListener('click', () => setView(state.calendarView));
   document.querySelector('#theme-toggle').addEventListener('click', toggleTheme);
+  document.querySelector('#skin-toggle').addEventListener('click', toggleSkin);
   bindAccountMenu();
+  bindBrandLink();
   bindSaveRetry(() => saves.retry());
   document.querySelector('#panel-close').addEventListener('click', closePanel);
   document.querySelector('#panel-backdrop').addEventListener('click', closePanel);
@@ -678,6 +680,9 @@ initTheme();
 document.querySelector('#copyright-year').textContent = String(new Date().getFullYear());
 bind();
 registerFeatures();
+// A link can open a page directly: index.html?view=todos (any known page).
+const linkedView = new URLSearchParams(location.search).get('view');
+if (isKnownView(linkedView)) state.view = linkedView;
 if (!isKnownView(state.view)) state.view = 'dashboard';
 if (mode === 'cloud') startCloud();
 else {

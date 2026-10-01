@@ -1,5 +1,6 @@
 /* CladFlo design tokens. Hello Kitty colours only (bow red, pink, white, nose
-   yellow, ink), never the character. Every other stylesheet reads these; no
+   yellow, ink), never the character; the One Piece skin further down swaps
+   them when chosen. Every other stylesheet reads these; no
    raw colours outside this file. html[data-theme] is set by js/theme.js; the
    media query is the fallback for when no theme attribute is present. */
 :root {
@@ -168,6 +169,140 @@ html[data-theme="dark"] {
     --st-inactive-ink: #c9b8c2;
     --shadow: 0 10px 30px rgba(0, 0, 0, .45);
     --shadow-lg: 0 18px 48px rgba(0, 0, 0, .6);
+  }
+}
+
+/* One Piece skin (js/theme.js sets html[data-skin="onepiece"]; Hello Kitty
+   above stays the default). Colours only, never the characters: straw-hat
+   yellow, Luffy's red, ocean blue and wanted-poster parchment by day; the
+   night sea with a straw-yellow "today" in dark mode. Text pairs keep 4.5:1. */
+html[data-skin="onepiece"] {
+  color-scheme: light;
+  --bow: #c8102e;
+  --bow-deep: #9e0c24;
+  --pink: #0b5ea8;
+  --blush: #f5d76e;
+  --nose: #f5c518;
+  --ink: #1f1a14;
+
+  --bg: #fbf4e4;
+  --bg-dot: rgba(11, 94, 168, .07);
+  --surface: #fffdf7;
+  --surface-2: #f6ecd6;
+  --surface-3: #efe0c0;
+  --text: #1f1a14;
+  --muted: #6b5a43;
+  --border: #e3cf9f;
+  --outline: #1f1a14;
+
+  --primary: #c8102e;
+  --primary-hover: #a50d26;
+  --on-primary: #ffffff;
+  --secondary: #f5c518;
+  --secondary-hover: #e0b10f;
+  --on-secondary: #1f1a14;
+  --accent: #0b5ea8;
+  --accent-soft: #e3eef8;
+  --accent-ink: #0a4f8f;
+  --on-accent: #ffffff;
+  --danger: #b3261e;
+  --on-danger: #ffffff;
+  --today: #0b5ea8;
+  --on-today: #ffffff;
+  --yellow: #f5c518;
+  --focus: #0b5ea8;
+  --backdrop: rgba(31, 26, 20, .5);
+
+  --st-lead: #f5c518;
+  --st-lead-ink: #5c4700;
+  --st-potential: #2f86d6;
+  --st-potential-ink: #0a4f8f;
+  --st-active: #c8102e;
+  --st-active-ink: #9e0c24;
+  --st-inactive: #9a8f80;
+  --st-inactive-ink: #5b5246;
+
+  --shadow: 0 10px 30px rgba(11, 94, 168, .12), 0 2px 6px rgba(31, 26, 20, .06);
+  --shadow-lg: 0 18px 48px rgba(11, 94, 168, .18), 0 4px 12px rgba(31, 26, 20, .1);
+}
+
+html[data-skin="onepiece"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b1626;
+  --bg-dot: rgba(245, 197, 24, .05);
+  --surface: #12223a;
+  --surface-2: #172b47;
+  --surface-3: #1e3656;
+  --text: #f4ecd8;
+  --muted: #b9c4d4;
+  --border: #26406a;
+  --outline: #050b14;
+  --primary: #e0313f;
+  --primary-hover: #f04452;
+  --on-primary: #ffffff;
+  --secondary: #4a3b0e;
+  --secondary-hover: #5c4a12;
+  --on-secondary: #f4ecd8;
+  --accent: #4da3ff;
+  --accent-soft: #16365c;
+  --accent-ink: #8cc4ff;
+  --on-accent: #06121f;
+  --danger: #ff6b6b;
+  --on-danger: #0b1626;
+  --today: #f5c518;
+  --on-today: #0b1626;
+  --focus: #f5c518;
+  --backdrop: rgba(0, 0, 0, .6);
+  --st-lead: #f5c518;
+  --st-lead-ink: #ffd84d;
+  --st-potential: #4da3ff;
+  --st-potential-ink: #8cc4ff;
+  --st-active: #ff5a5f;
+  --st-active-ink: #ff8a8e;
+  --st-inactive: #8b97a8;
+  --st-inactive-ink: #c2cbd8;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  --shadow-lg: 0 18px 48px rgba(0, 0, 0, .65);
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-skin="onepiece"]:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #0b1626;
+    --bg-dot: rgba(245, 197, 24, .05);
+    --surface: #12223a;
+    --surface-2: #172b47;
+    --surface-3: #1e3656;
+    --text: #f4ecd8;
+    --muted: #b9c4d4;
+    --border: #26406a;
+    --outline: #050b14;
+    --primary: #e0313f;
+    --primary-hover: #f04452;
+    --on-primary: #ffffff;
+    --secondary: #4a3b0e;
+    --secondary-hover: #5c4a12;
+    --on-secondary: #f4ecd8;
+    --accent: #4da3ff;
+    --accent-soft: #16365c;
+    --accent-ink: #8cc4ff;
+    --on-accent: #06121f;
+    --danger: #ff6b6b;
+    --on-danger: #0b1626;
+    --today: #f5c518;
+    --on-today: #0b1626;
+    --focus: #f5c518;
+    --backdrop: rgba(0, 0, 0, .6);
+    --st-lead: #f5c518;
+    --st-lead-ink: #ffd84d;
+    --st-potential: #4da3ff;
+    --st-potential-ink: #8cc4ff;
+    --st-active: #ff5a5f;
+    --st-active-ink: #ff8a8e;
+    --st-inactive: #8b97a8;
+    --st-inactive-ink: #c2cbd8;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5);
+    --shadow-lg: 0 18px 48px rgba(0, 0, 0, .65);
   }
 }
 

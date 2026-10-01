@@ -2,6 +2,7 @@
 // Clear all data, in local mode and against the fake Firebase. Groq is mocked.
 
 import { test, expect } from './fixtures.mjs';
+import { openAccountMenu } from './helpers.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,13 +53,15 @@ async function mockGroq(page, status) {
 test('the gear opens Settings; the close button and Escape close it', async ({ page }) => {
   await openLocal(page);
   await expect(page.locator('#settings')).toBeHidden();
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#settings')).toBeVisible();
   await expect(page.locator('#settings h3')).toHaveText(['AI settings', 'Business', 'Data']);
   await expect(page.locator('#groq-key')).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.locator('#settings')).toBeHidden();
-  await expect(page.locator('#settings-btn')).toBeFocused();
+  await expect(page.locator('#account-btn')).toBeFocused();
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await page.locator('#settings-close').click();
   await expect(page.locator('#settings')).toBeHidden();
@@ -66,6 +69,7 @@ test('the gear opens Settings; the close button and Escape close it', async ({ p
 
 test('AI settings: the key is masked, saved in this browser only, and can be removed', async ({ page }) => {
   await openLocal(page);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#groq-key')).toHaveAttribute('type', 'password');
   await expect(page.locator('#groq-key-state')).toHaveText('No key saved yet.');
@@ -88,11 +92,13 @@ test('AI settings: the key is masked, saved in this browser only, and can be rem
 
 test('AI settings: the model defaults to Llama 3.3 70B and the choice is kept', async ({ page }) => {
   await openLocal(page);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#groq-model')).toHaveValue('llama-3.3-70b-versatile');
   await expect(page.locator('#groq-model option')).toHaveCount(2);
   await page.locator('#groq-model').selectOption('llama-3.1-8b-instant');
   await page.reload();
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#groq-model')).toHaveValue('llama-3.1-8b-instant');
 });
@@ -100,6 +106,7 @@ test('AI settings: the model defaults to Llama 3.3 70B and the choice is kept', 
 test('Test key: a working key says so; a bad one says "Key not valid"', async ({ page }) => {
   await openLocal(page);
   let requests = await mockGroq(page, 200);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await page.locator('#groq-key').fill(KEY);
   await page.locator('#groq-test').click();
@@ -119,6 +126,7 @@ test('Test key: a working key says so; a bad one says "Key not valid"', async ({
 test('Test key with nothing saved asks for a key and sends nothing', async ({ page }) => {
   await openLocal(page);
   const requests = await mockGroq(page, 200);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await page.locator('#groq-test').click();
   await expect(page.locator('#groq-status')).toHaveText('Paste your Groq API key first.');
@@ -132,6 +140,7 @@ test('Clear all (local): needs CLEAR, deletes reminders and minutes, keeps and a
     'client-calendar.history.v1': [OLD_ENTRY]
   });
   await expect(page.locator('#grid .chip')).toHaveCount(2);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   const button = page.locator('#clear-all');
   await expect(button).toBeDisabled();
@@ -181,6 +190,7 @@ test('Clear all (cloud): deletes the account\'s reminders and minutes in Firesto
   await page.locator('#sign-in').click();
   await expect(page.locator('#grid .chip')).toHaveCount(2);
 
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await page.locator('#clear-confirm').fill('CLEAR');
   await page.locator('#clear-all').click();
@@ -205,6 +215,7 @@ test('Clear all while signed out does nothing and says why', async ({ page }) =>
   await page.addInitScript({ path: join(here, 'fake-firebase.js') });
   await page.goto('/index.html');
   await expect(page.locator('#signed-out')).toBeVisible();
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await page.locator('#clear-confirm').fill('CLEAR');
   await page.locator('#clear-all').click();
@@ -236,6 +247,7 @@ async function fillBusiness(page, values) {
 
 test('Business: defaults to AED, flags bad fields and saves nothing until they are fixed', async ({ page }) => {
   await openLocal(page);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   const form = page.locator('#business-form');
   await expect(form.locator('[name="currency"]')).toHaveValue('AED');
@@ -255,6 +267,7 @@ test('Business: defaults to AED, flags bad fields and saves nothing until they a
 
 test('Business (local): saves tidied values in this browser and keeps them after a reload', async ({ page }) => {
   await openLocal(page);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await fillBusiness(page, {
     currency: 'USD',
@@ -276,6 +289,7 @@ test('Business (local): saves tidied values in this browser and keeps them after
 
   await page.reload();
   await page.waitForSelector('#grid .day');
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#business-form [name="currency"]')).toHaveValue('USD');
   await expect(page.locator('#business-form [name="gcashNumber"]')).toHaveValue('09171234567');
@@ -285,8 +299,9 @@ test('Business (local): saves tidied values in this browser and keeps them after
 test('Business (cloud): saves to users/{uid}/settings/app and picks up a change from another device', async ({ page }) => {
   await openCloud(page, { 'users/user-1/settings/app': { currency: 'EUR', paypalLink: 'https://paypal.me/old' } });
   await page.locator('#sign-in').click();
-  await expect(page.locator('#account')).toBeVisible();
+  await expect(page.locator('body')).toHaveAttribute('data-auth', 'signed-in');
 
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#business-form [name="currency"]')).toHaveValue('EUR');
   await expect(page.locator('#business-form [name="paypalLink"]')).toHaveValue('https://paypal.me/old');
@@ -300,6 +315,7 @@ test('Business (cloud): saves to users/{uid}/settings/app and picks up a change 
   // Closed dialog: a save from another device shows next time it opens.
   await page.keyboard.press('Escape');
   await page.evaluate(() => window.__fake.remoteSet('users/user-1/settings/app', { currency: 'SAR' }));
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await expect(page.locator('#business-form [name="currency"]')).toHaveValue('SAR');
   await expect(page.locator('#business-form [name="paypalLink"]')).toHaveValue('');
@@ -308,6 +324,7 @@ test('Business (cloud): saves to users/{uid}/settings/app and picks up a change 
 test('Business while signed out says to sign in and writes nothing', async ({ page }) => {
   await openCloud(page);
   await expect(page.locator('#signed-out')).toBeVisible();
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await fillBusiness(page, { currency: 'USD' });
   await page.locator('#biz-save').click();
@@ -318,6 +335,7 @@ test('Business while signed out says to sign in and writes nothing', async ({ pa
 test('phone: the Business section fits 390px and its fields and Save are at least 44px tall', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openLocal(page);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   const form = page.locator('#business-form');
   await form.scrollIntoViewIfNeeded();

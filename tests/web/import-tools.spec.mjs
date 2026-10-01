@@ -5,7 +5,7 @@
 import { test, expect } from './fixtures.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openApp } from './helpers.mjs';
+import { openApp, openAccountMenu } from './helpers.mjs';
 import XLSX from 'xlsx';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -140,6 +140,7 @@ test('the import toast shows a spinner and "Importing n/total" per chunk, then t
 test('History keeps the file: Re-import updates the same reminders (no duplicates) and logs it, even after a reload', async ({ page }) => {
   await importSample(page);
   await page.reload();
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   const imported = historyItems(page).filter({ hasText: 'sample.xlsx' });
   await expect(imported).toHaveCount(1);
@@ -188,6 +189,7 @@ test('Month: clears only that month; Home keeps the clients, other months keep t
   await expect(page.locator('#home-board')).toContainText('Falcon Trading');
   await expect(page.locator('#home-board')).toContainText('Palm Holdings');
 
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   await expect(historyItems(page).first()).toContainText('Cleared 2 reminders from October 2026');
   await expect(historyItems(page).first()).toContainText('Month: October 2026');
@@ -215,6 +217,7 @@ test('Day clears only that day and Week only that week; the same reminders leave
   await expect(page.locator('#grid .chip')).toHaveCount(0);
 
   // Re-import keeps them cleared; Add to calendar brings one back.
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   await historyItems(page).filter({ hasText: 'sample.xlsx' }).locator('.history-reimport').click();
   await expect(page.locator('#banner-title')).toHaveText(SAME_AGAIN);
@@ -245,12 +248,14 @@ test('an empty period cannot be cleared; Cancel and Escape close without clearin
 
 test('Clear all data keeps History and the file, so Re-import brings the reminders back', async ({ page }) => {
   await importSample(page);
+  await openAccountMenu(page);
   await page.locator('#settings-btn').click();
   await page.locator('#clear-confirm').fill('CLEAR');
   await page.locator('#clear-all').click();
   await expect(page.locator('#clear-status')).toHaveText('Cleared 4 reminders, 0 minutes.');
   await page.locator('#settings-close').click();
 
+  await openAccountMenu(page);
   await page.locator('#view-history').click();
   await historyItems(page).filter({ hasText: 'sample.xlsx' }).locator('.history-reimport').click();
   await expect(page.locator('#banner-title')).toHaveText(ALL_NEW);

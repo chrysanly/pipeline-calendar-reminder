@@ -55,8 +55,9 @@
 .dp-field { position: relative; display: flex; min-width: 0; }
 .dp-field > input { width: 100%; padding-right: calc(var(--tap) + 4px); }
 .dp-toggle {
-  position: absolute; top: 50%; right: 4px; transform: translateY(-50%);
-  display: grid; place-items: center; width: calc(var(--tap) - 8px); height: calc(var(--tap) - 8px);
+  /* A full 44px tap target over the input's right end (the input pads for it). */
+  position: absolute; top: 50%; right: 0; transform: translateY(-50%);
+  display: grid; place-items: center; width: var(--tap); height: var(--tap);
   padding: 0; color: var(--accent-ink); background: transparent;
   border: 0; border-radius: var(--radius-sm); cursor: pointer;
 }
